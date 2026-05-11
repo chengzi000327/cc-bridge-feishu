@@ -1,17 +1,20 @@
-FROM node:20-slim AS build
+FROM node:20-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
+
+FROM deps AS build
 COPY tsconfig.json ./
 COPY src/ src/
 RUN npm run build
 
-FROM node:20-slim
+FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
+ENV NODE_ENV=production
+ENV BRIDGE_HOME=/data/cc-bridge-feishu
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist dist/
 COPY scripts/ scripts/
-
-ENV NODE_ENV=production
-ENTRYPOINT ["node", "dist/src/index.js"]
+EXPOSE 3000
+CMD ["node", "dist/src/index.js"]

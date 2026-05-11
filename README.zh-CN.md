@@ -1409,6 +1409,50 @@ Fast Mode 是 Codex CLI 自己的功能，但在无人值守 bridge 实例里，
 
 ---
 
+## Railway 部署
+
+Railway 部署使用 Dockerfile 构建，HTTP 服务默认监听 `PORT`，健康检查路径为 `/health`。飞书事件订阅的 Request URL 配成：
+
+```text
+https://<railway-domain>/feishu/events
+```
+
+必填环境变量：
+
+- `FEISHU_APP_ID`
+- `FEISHU_APP_SECRET`
+- `FEISHU_VERIFICATION_TOKEN`
+- `FEISHU_ENCRYPT_KEY`：如果飞书事件订阅未开启加密，可留空。
+- `BRIDGE_HOME=/data/cc-bridge-feishu`
+- `CODEX_HOME=/data/cc-bridge-feishu/.codex`
+- `CLAUDE_CONFIG_DIR=/data/cc-bridge-feishu/.claude`
+
+Railway 必须挂载 Volume 到 `/data`。否则 CLI 登录态、会话、workspace、实例配置和运行状态会在重启后丢失。
+
+Provider 示例：
+
+```json
+{
+  "engine": "codex",
+  "provider": {
+    "kind": "openai-compatible",
+    "name": "deepseek",
+    "model": "deepseek-chat",
+    "baseUrl": "https://api.deepseek.com",
+    "apiKeyEnv": "DEEPSEEK_API_KEY",
+    "temperature": 0.2,
+    "thinking": { "enabled": true, "effort": "medium" },
+    "timeoutMs": 1800000,
+    "inactivityTimeoutMs": 300000,
+    "retries": { "maxAttempts": 2, "baseDelayMs": 1000, "maxDelayMs": 10000 }
+  }
+}
+```
+
+飞书开放平台需要开启事件订阅 `im.message.receive_v1`，并授予读取用户消息、发送消息、读取文件资源等权限。具体权限名称以飞书后台当前显示为准。
+
+---
+
 ## 许可证
 
 [MIT](./LICENSE)
