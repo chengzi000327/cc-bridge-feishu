@@ -702,6 +702,7 @@ export async function createServiceDependencies(env: EnvSource): Promise<{ confi
   const sessionManager = new SessionManager(sessionStore, adapter);
   const bridge = new Bridge(accessStore, sessionManager, adapter, {
     loadGroupMode: async () => (await loadInstanceConfig(config.stateDir)).groupMode,
+    loadProviderRetry: async () => (await loadInstanceConfig(config.stateDir)).provider.retries,
   });
 
   return { config, api, bridge };

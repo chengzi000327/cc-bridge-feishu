@@ -60,6 +60,44 @@ describe("Bridge", () => {
     expect(sessionManager.bindSession).not.toHaveBeenCalled();
   });
 
+  it("retries transient provider failures before returning the response", async () => {
+    const accessStore: AccessStoreLike = {
+      load: vi.fn().mockResolvedValue({
+        policy: "allowlist",
+        pairedUsers: [],
+        allowlist: [84],
+        pendingPairs: [],
+      }),
+      issuePairingCode: vi.fn(),
+    };
+    const sessionManager: SessionManagerLike = {
+      getOrCreateSession: vi.fn().mockResolvedValue({ sessionId: "telegram-84" }),
+      bindSession: vi.fn(),
+    };
+    const adapter: CodexAdapter = {
+      sendUserMessage: vi.fn()
+        .mockRejectedValueOnce(new Error("rate limit"))
+        .mockResolvedValueOnce({ text: "done", sessionId: "thread-after-retry" }),
+      createSession: vi.fn(),
+    };
+
+    const bridge = new Bridge(accessStore, sessionManager, adapter, {
+      loadProviderRetry: vi.fn().mockResolvedValue({ maxAttempts: 2, baseDelayMs: 0, maxDelayMs: 0 }),
+    });
+    const result = await bridge.handleAuthorizedMessage({
+      chatId: 84,
+      userId: 42,
+      chatType: "private",
+      text: "hello",
+      replyContext: undefined,
+      files: [],
+    });
+
+    expect(result.text).toBe("done");
+    expect(adapter.sendUserMessage).toHaveBeenCalledTimes(2);
+    expect(sessionManager.bindSession).toHaveBeenCalledWith(84, "thread-after-retry");
+  });
+
   it("uses the Telegram topic conversation key when present", async () => {
     const accessStore: AccessStoreLike = {
       load: vi.fn().mockResolvedValue({

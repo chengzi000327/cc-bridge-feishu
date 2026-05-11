@@ -13,6 +13,7 @@ import {
   renderUnauthorizedMessage,
 } from "../telegram/message-renderer.js";
 import type { GroupModeConfig } from "../telegram/instance-config.js";
+import { runWithProviderRetry, type RetryConfig } from "../provider/retry.js";
 
 export interface AccessStoreLike {
   load(): Promise<{
@@ -99,6 +100,7 @@ export class Bridge {
     private readonly adapter: CodexAdapter,
     private readonly options: {
       loadGroupMode?: () => Promise<GroupModeConfig>;
+      loadProviderRetry?: () => Promise<RetryConfig>;
     } = {},
   ) {
     this.supportsTurnScopedEnv = adapter.supportsTurnScopedEnv !== false;
@@ -273,19 +275,23 @@ export class Bridge {
     const text = baseText;
     const turnEnvSupported = this.adapter.supportsTurnScopedEnv !== false;
     const disableRuntimeTimeout = shouldDisableRuntimeTimeout(input.text);
-    const response = await this.adapter.sendUserMessage(session.sessionId, {
-      text,
-      files: input.files,
-      instructions: undefined,
-      onProgress: input.onProgress,
-      onApprovalRequest: input.onApprovalRequest,
-      onEngineEvent: input.onEngineEvent,
-      requestOutputDir: input.requestOutputDir,
-      workspaceOverride: input.workspaceOverride,
-      extraEnv: turnEnvSupported ? input.extraEnv : undefined,
-      abortSignal: input.abortSignal,
-      disableRuntimeTimeout: disableRuntimeTimeout || undefined,
-    });
+    const retryConfig = this.options.loadProviderRetry
+      ? await this.options.loadProviderRetry()
+      : { maxAttempts: 1, baseDelayMs: 0, maxDelayMs: 0 };
+    const response = await runWithProviderRetry(retryConfig, () =>
+      this.adapter.sendUserMessage(session.sessionId, {
+        text,
+        files: input.files,
+        instructions: undefined,
+        onProgress: input.onProgress,
+        onApprovalRequest: input.onApprovalRequest,
+        onEngineEvent: input.onEngineEvent,
+        requestOutputDir: input.requestOutputDir,
+        workspaceOverride: input.workspaceOverride,
+        extraEnv: turnEnvSupported ? input.extraEnv : undefined,
+        abortSignal: input.abortSignal,
+        disableRuntimeTimeout: disableRuntimeTimeout || undefined,
+      }));
 
     if (!input.sessionIdOverride && response.sessionId && response.sessionId !== session.sessionId) {
       await this.sessionManager.bindSession(useConversationScope ? sessionScope : input.chatId, response.sessionId);

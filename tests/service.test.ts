@@ -42,6 +42,7 @@ import { FileWorkflowStore } from "../src/state/file-workflow-store.js";
 import { JsonStore } from "../src/state/json-store.js";
 import { SessionManager } from "../src/runtime/session-manager.js";
 import { SessionStore } from "../src/state/session-store.js";
+import type { RetryConfig } from "../src/provider/retry.js";
 import { removeTempRoot } from "./helpers/temp-files.js";
 
 function createDeferred<T>() {
@@ -173,6 +174,36 @@ describe("readInstanceBotTokenFromEnvFile", () => {
 });
 
 describe("createServiceDependenciesForInstance", () => {
+  it("wires provider retry config into the bridge", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const stateDir = path.join(root, ".cctb", "default");
+
+    try {
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(path.join(stateDir, "config.json"), JSON.stringify({
+        provider: {
+          retries: { maxAttempts: 3, baseDelayMs: 25, maxDelayMs: 250 },
+        },
+      }) + "\n", "utf8");
+
+      const result = await createServiceDependencies({
+        USERPROFILE: root,
+        TELEGRAM_BOT_TOKEN: "secret-token",
+      });
+      const bridgeOptions = (result.bridge as unknown as {
+        options: { loadProviderRetry: () => Promise<RetryConfig> };
+      }).options;
+
+      await expect(bridgeOptions.loadProviderRetry()).resolves.toEqual({
+        maxAttempts: 3,
+        baseDelayMs: 25,
+        maxDelayMs: 250,
+      });
+    } finally {
+      await removeTempRoot(root);
+    }
+  });
+
   it("reports Claude's default runtime as stream", () => {
     expect(resolveEngineRuntime("claude", "normal")).toBe("stream");
   });
