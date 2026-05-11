@@ -1,0 +1,342 @@
+import path from "node:path";
+
+import { Bridge } from "../runtime/bridge.js";
+import {
+  FileWorkflowPreparationError,
+} from "../runtime/file-workflow.js";
+import { classifyFailure } from "../runtime/error-classification.js";
+import { FileWorkflowStore } from "../state/file-workflow-store.js";
+import { SessionStore } from "../state/session-store.js";
+import { dispatchAuthorizedTelegramMessage } from "./authorized-dispatch.js";
+import { loadInstanceConfig, updateInstanceConfig } from "./instance-config.js";
+import { deliverTelegramResponse, sendFileOrPhoto } from "./response-delivery.js";
+import {
+  appendUpdateReplyAuditEventBestEffort,
+} from "./turn-bookkeeping.js";
+import { finalizeTelegramTurnError, maybeRetryTelegramTurnError } from "./turn-error.js";
+import { appendTimelineEventBestEffort } from "../runtime/timeline-events.js";
+import { requestTelegramApproval } from "./approval-requests.js";
+import { getTelegramConversationLogScope } from "./conversation-key.js";
+
+async function updateWorkflowBestEffort(
+  workflowStore: FileWorkflowStore,
+  workflowRecordId: string,
+  mutate: Parameters<FileWorkflowStore["update"]>[1],
+): Promise<void> {
+  try {
+    await workflowStore.update(workflowRecordId, mutate);
+  } catch {
+    // Visible Telegram delivery already succeeded; workflow persistence is bookkeeping-only now.
+  }
+}
+
+async function releaseRetrySupersededWorkflowBestEffort(input: {
+  stateDir: string;
+  normalized: NormalizedTelegramMessage;
+  context: TelegramDeliveryContext;
+  workflowStore: FileWorkflowStore;
+  turnState: {
+    workflowRecordId?: string;
+    archiveSummaryDelivered: boolean;
+  };
+  reason: "auth refresh" | "stale session";
+  failureCategory: ReturnType<typeof classifyFailure>;
+}): Promise<void> {
+  const { stateDir, normalized, context, workflowStore, turnState, reason, failureCategory } = input;
+  if (!turnState.workflowRecordId || turnState.archiveSummaryDelivered) {
+    return;
+  }
+
+  const workflowRecordId = turnState.workflowRecordId;
+  try {
+    let detail = "workflow released before retry";
+    if (normalized.attachments.length > 0) {
+      const removed = await workflowStore.remove(workflowRecordId);
+      if (!removed) {
+        return;
+      }
+      detail = "workflow removed before retry";
+    } else {
+      let released = false;
+      await workflowStore.update(workflowRecordId, (record) => {
+        if (record.kind === "archive" && record.status === "processing") {
+          record.status = "awaiting_continue";
+          released = true;
+        }
+      });
+      if (!released) {
+        return;
+      }
+    }
+
+    turnState.workflowRecordId = undefined;
+    await appendTimelineEventBestEffort(stateDir, {
+      type: "workflow.failed",
+      instanceName: context.instanceName,
+      channel: "telegram",
+      chatId: normalized.chatId,
+      ...getTelegramConversationLogScope(normalized),
+      userId: normalized.userId,
+      updateId: context.updateId,
+      detail,
+      metadata: {
+        workflowRecordId,
+        retryReason: reason,
+        failureCategory,
+      },
+    });
+  } catch {
+    // Retry should still proceed; a later operator cleanup can remove stale bookkeeping.
+  }
+}
+
+import {
+  renderErrorMessage,
+  renderUnauthorizedMessage,
+  type Locale,
+} from "./message-renderer.js";
+import { TelegramApi, withTelegramMessageThread } from "./api.js";
+import type { NormalizedTelegramMessage } from "./update-normalizer.js";
+import { handleGroupCommand, isGroupCommand } from "./group-commands.js";
+
+export interface TelegramDeliveryContext {
+  api: TelegramApi;
+  bridge: Bridge;
+  inboxDir: string;
+  instanceName?: string;
+  updateId?: number;
+  source?: "telegram" | "cron";
+  abortSignal?: AbortSignal;
+  runQueuedBridgeTurn?<T>(conversationKey: string, job: () => Promise<T>): Promise<T>;
+  sessionIdOverride?: string;
+  onAuthRetry?: () => Promise<void>;
+  _authRetried?: boolean;
+  _staleSessionRetried?: boolean;
+}
+
+export async function handleNormalizedTelegramMessage(
+  normalized: NormalizedTelegramMessage,
+  context: TelegramDeliveryContext,
+): Promise<void> {
+  if (normalized.messageThreadId !== undefined) {
+    context = {
+      ...context,
+      api: withTelegramMessageThread(context.api, normalized.messageThreadId),
+    };
+  }
+  const startedAt = Date.now();
+  let typingInterval: ReturnType<typeof setInterval> | undefined;
+  const turnState = {
+    workflowRecordId: undefined as string | undefined,
+    archiveSummaryDelivered: false,
+    telegramOutDirPath: undefined as string | undefined,
+    failureHint: undefined as string | undefined,
+  };
+  const stateDir = path.dirname(context.inboxDir);
+  const workflowStore = new FileWorkflowStore(stateDir);
+  const sessionStore = new SessionStore(path.join(stateDir, "session.json"));
+  const cfg = await loadInstanceConfig(stateDir);
+  const locale = cfg.locale;
+
+  if (isGroupCommand(normalized.text)) {
+    const handled = await handleGroupCommand({
+      stateDir,
+      startedAt,
+      locale,
+      cfg: {
+        groupMode: cfg.groupMode,
+      },
+      normalized,
+      context: {
+        ...context,
+        bridge: context.bridge,
+        api: context.api,
+      },
+      updateInstanceConfig: async (updater) => await updateInstanceConfig(stateDir, updater),
+    });
+    if (handled) {
+      return;
+    }
+  }
+
+  const startTyping = () => {
+    if (typingInterval) {
+      return;
+    }
+    context.api.sendChatAction(normalized.chatId).catch(() => {});
+    typingInterval = setInterval(() => {
+      context.api.sendChatAction(normalized.chatId).catch(() => {});
+    }, 4000);
+  };
+  const stopTyping = () => {
+    if (typingInterval) {
+      clearInterval(typingInterval);
+      typingInterval = undefined;
+    }
+  };
+
+  try {
+    if (normalized.callbackQueryId) {
+      try {
+        await context.api.answerCallbackQuery(normalized.callbackQueryId);
+      } catch {
+        // Callback acks are advisory; continuation should still proceed.
+      }
+    }
+    await appendTimelineEventBestEffort(stateDir, {
+      type: "input.received",
+      instanceName: context.instanceName,
+      channel: "telegram",
+      chatId: normalized.chatId,
+      ...getTelegramConversationLogScope(normalized),
+      userId: normalized.userId,
+      updateId: context.updateId,
+      metadata: {
+        attachments: normalized.attachments.length,
+        hasReplyContext: normalized.replyContext !== undefined,
+        hasCallbackQuery: normalized.callbackQueryId !== undefined,
+      },
+    });
+
+    const accessDecision = await context.bridge.checkAccess({
+      chatId: normalized.chatId,
+      userId: normalized.userId,
+      chatType: normalized.chatType,
+      messageThreadId: normalized.messageThreadId,
+      conversationKey: normalized.conversationKey,
+      locale,
+    });
+
+    if (accessDecision.kind === "reply" || accessDecision.kind === "deny") {
+      if (normalized.chatType !== "private" && normalized.chatType !== "bus") {
+        await appendUpdateReplyAuditEventBestEffort(path.dirname(context.inboxDir), context, normalized, {
+          detail: accessDecision.text,
+          metadata: {
+            durationMs: Date.now() - startedAt,
+            attachments: normalized.attachments.length,
+            silenced: true,
+          },
+        });
+        return;
+      }
+      await context.api.sendMessage(
+        normalized.chatId,
+        accessDecision.text ?? renderErrorMessage(renderUnauthorizedMessage(locale), locale),
+      );
+      await appendUpdateReplyAuditEventBestEffort(path.dirname(context.inboxDir), context, normalized, {
+        detail: accessDecision.text,
+        metadata: {
+          durationMs: Date.now() - startedAt,
+          attachments: normalized.attachments.length,
+        },
+      });
+      return;
+    }
+
+    startTyping();
+
+    await dispatchAuthorizedTelegramMessage({
+      stateDir,
+      startedAt,
+      locale,
+      cfg: {
+        engine: cfg.engine,
+        budgetUsd: cfg.budgetUsd,
+        effort: cfg.effort,
+        model: cfg.model,
+        codexServiceTier: cfg.codexServiceTier,
+        resume: cfg.resume,
+      },
+      normalized,
+      context: {
+        ...context,
+        onApprovalRequest: async (request) => {
+          stopTyping();
+          try {
+            return await requestTelegramApproval({
+              api: context.api,
+              chatId: normalized.chatId,
+              messageThreadId: normalized.messageThreadId,
+              userId: normalized.userId,
+              locale,
+              request,
+              abortSignal: request.abortSignal ?? context.abortSignal,
+            });
+          } finally {
+            if (!context.abortSignal?.aborted) {
+              startTyping();
+            }
+          }
+        },
+      },
+      workflowStore,
+      deps: {
+        sessionStore,
+        turnState,
+        updateInstanceConfig: async (updater) => await updateInstanceConfig(stateDir, updater),
+        deliverTelegramResponse: async (_api, chatId, text, inboxDir, workspaceOverride, requestOutputDir, turnLocale, options) => (
+          deliverTelegramResponse(context.api, chatId, text, inboxDir, workspaceOverride, requestOutputDir, turnLocale, options)
+        ),
+        sendTelegramOutFile: async (chatId, filename, contents) => {
+          await sendFileOrPhoto(context.api, chatId, filename, contents);
+        },
+        updateWorkflowBestEffort: async (_workflowStore, workflowRecordId, mutate) => {
+          await updateWorkflowBestEffort(workflowStore, workflowRecordId, mutate);
+        },
+      },
+    });
+    return;
+  } catch (error) {
+    if (turnState.workflowRecordId === undefined && error instanceof FileWorkflowPreparationError) {
+      turnState.workflowRecordId = error.workflowRecordId;
+    }
+
+    const classifiedError = error instanceof FileWorkflowPreparationError ? error.cause : error;
+    const failureCategory = classifyFailure(error);
+    if (await maybeRetryTelegramTurnError({
+      stateDir,
+      normalized,
+      classifiedError,
+      failureCategory,
+      context,
+      sessionStore,
+      stopTyping,
+      beforeRetry: async (reason) => {
+        await releaseRetrySupersededWorkflowBestEffort({
+          stateDir,
+          normalized,
+          context,
+          workflowStore,
+          turnState,
+          reason,
+          failureCategory,
+        });
+      },
+      restart: async () => {
+        await handleNormalizedTelegramMessage(normalized, context);
+      },
+    })) {
+      return;
+    }
+
+    await finalizeTelegramTurnError({
+      stateDir,
+      startedAt,
+      locale,
+      normalized,
+      context,
+      workflowStore,
+      classifiedError,
+      failureCategory,
+      turnState,
+      engine: cfg.engine,
+    });
+
+  } finally {
+    // Guarantee the typing interval always stops. Without this every new
+    // early-return branch is a potential leak (setInterval pins the closure,
+    // sendChatAction keeps firing forever). See f1bfc31 / aaca5f5 — both
+    // were symptoms of this pattern.
+    stopTyping();
+  }
+}
