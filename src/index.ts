@@ -53,7 +53,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    if (await runCli(argv)) {
+    if (argv.length > 0 && await runCli(argv)) {
       return;
     }
 
