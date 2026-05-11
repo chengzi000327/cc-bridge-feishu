@@ -17,6 +17,7 @@ import {
 import { killProcessTree } from "./process-tree.js";
 import type { ApprovalMode } from "./process-adapter.js";
 import { mergeAllowedTurnExtraEnv } from "./turn-env.js";
+import { normalizeProviderConfig } from "../provider/provider-config.js";
 
 type SpawnOptions = {
   stdio: ["pipe", "pipe", "pipe"];
@@ -295,10 +296,11 @@ export class ProcessClaudeAdapter implements CodexAdapter {
 
     try {
       const raw = await readFile(this.configPath, "utf8");
-      const parsed = JSON.parse(raw) as { effort?: string; model?: string };
+      const parsed = JSON.parse(raw) as { effort?: string; model?: string; provider?: unknown };
+      const provider = normalizeProviderConfig(parsed.provider);
       return {
-        effort: typeof parsed.effort === "string" ? parsed.effort : undefined,
-        model: typeof parsed.model === "string" ? parsed.model : undefined,
+        effort: provider.thinking.effort ?? (typeof parsed.effort === "string" ? parsed.effort : undefined),
+        model: provider.model ?? (typeof parsed.model === "string" ? parsed.model : undefined),
       };
     } catch {
       return {};

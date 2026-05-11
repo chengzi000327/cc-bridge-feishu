@@ -26,6 +26,7 @@ import type {
   EngineStreamEvent,
   CodexUserMessageInput,
 } from "./adapter.js";
+import { normalizeProviderConfig } from "../provider/provider-config.js";
 import type { ApprovalMode } from "./process-adapter.js";
 
 type SpawnOptions = {
@@ -390,10 +391,11 @@ export class ClaudeStreamAdapter implements CodexAdapter {
 
     try {
       const raw = await readFile(this.configPath, "utf8");
-      const parsed = JSON.parse(raw) as { effort?: string; model?: string };
+      const parsed = JSON.parse(raw) as { effort?: string; model?: string; provider?: unknown };
+      const provider = normalizeProviderConfig(parsed.provider);
       return {
-        effort: typeof parsed.effort === "string" ? parsed.effort : undefined,
-        model: typeof parsed.model === "string" ? parsed.model : undefined,
+        effort: provider.thinking.effort ?? (typeof parsed.effort === "string" ? parsed.effort : undefined),
+        model: provider.model ?? (typeof parsed.model === "string" ? parsed.model : undefined),
       };
     } catch {
       return {};

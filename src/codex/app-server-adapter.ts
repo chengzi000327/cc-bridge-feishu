@@ -10,6 +10,7 @@ import type {
   CodexUserMessageInput,
 } from "./adapter.js";
 import { readValidatedConfigFile } from "../telegram/instance-config.js";
+import { normalizeProviderConfig } from "../provider/provider-config.js";
 
 type SpawnOptions = {
   stdio: ["pipe", "pipe", "pipe"];
@@ -345,8 +346,9 @@ export class CodexAppServerAdapter implements CodexAdapter {
       parsed.approvalMode === "full-auto" || parsed.approvalMode === "bypass"
         ? parsed.approvalMode
         : "normal";
-    const effort = typeof parsed.effort === "string" ? parsed.effort : undefined;
-    const model = typeof parsed.model === "string" && parsed.model.trim() ? parsed.model.trim() : undefined;
+    const provider = normalizeProviderConfig(parsed.provider);
+    const effort = provider.thinking.effort ?? (typeof parsed.effort === "string" ? parsed.effort : undefined);
+    const model = provider.model ?? (typeof parsed.model === "string" && parsed.model.trim() ? parsed.model.trim() : undefined);
     const codexServiceTier = parsed.codexServiceTier === "fast" ? "fast" : undefined;
     const initializeArgs = ["app-server"];
 
@@ -365,6 +367,16 @@ export class CodexAppServerAdapter implements CodexAdapter {
       initializeArgs.push("-c", `model="${model}"`);
     }
 
+    if (provider.temperature !== undefined) {
+      initializeArgs.push("-c", `temperature=${provider.temperature}`);
+    }
+
+    if (provider.baseUrl) {
+      initializeArgs.push("-c", `model_provider.base_url="${provider.baseUrl}"`);
+    }
+
+    initializeArgs.push(...provider.extraArgs);
+
     if (codexServiceTier === "fast") {
       initializeArgs.push("--enable", "fast_mode", "-c", 'service_tier="fast"');
     }
@@ -375,7 +387,7 @@ export class CodexAppServerAdapter implements CodexAdapter {
       model,
       codexServiceTier,
       initializeArgs,
-      initializeKey: JSON.stringify({ approvalMode, effort, model, codexServiceTier }),
+      initializeKey: JSON.stringify({ approvalMode, effort, model, codexServiceTier, provider }),
     };
   }
 

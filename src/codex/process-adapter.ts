@@ -14,6 +14,7 @@ import type {
 import { CodexAppServerAdapter, type AppServerSpawnCodex } from "./app-server-adapter.js";
 import { killProcessTree } from "./process-tree.js";
 import { mergeAllowedTurnExtraEnv } from "./turn-env.js";
+import { normalizeProviderConfig, type ProviderConfig } from "../provider/provider-config.js";
 
 type SpawnOptions = {
   stdio: ["pipe", "pipe", "pipe"];
@@ -88,6 +89,16 @@ type CodexTurnState = {
 };
 
 type EmitEngineEvent = (event: EngineStreamEvent) => void;
+type ProcessEngineOptions = {
+  effort?: string;
+  model?: string;
+  codexServiceTier?: "fast";
+  provider: ProviderConfig;
+};
+
+function defaultProcessEngineOptions(): ProcessEngineOptions {
+  return { provider: normalizeProviderConfig(undefined) };
+}
 
 function createTurnState(): CodexTurnState {
   return {
@@ -450,21 +461,23 @@ export class ProcessCodexAdapter implements CodexAdapter {
     }
   }
 
-  private async loadEngineOptions(): Promise<{ effort?: string; model?: string; codexServiceTier?: "fast" }> {
+  private async loadEngineOptions(): Promise<ProcessEngineOptions> {
     if (!this.configPath) {
-      return {};
+      return defaultProcessEngineOptions();
     }
 
     try {
       const raw = await readFile(this.configPath, "utf8");
-      const parsed = JSON.parse(raw) as { effort?: string; model?: string; codexServiceTier?: string };
+      const parsed = JSON.parse(raw) as { effort?: string; model?: string; codexServiceTier?: string; provider?: unknown };
+      const provider = normalizeProviderConfig(parsed.provider);
       return {
-        effort: typeof parsed.effort === "string" ? parsed.effort : undefined,
-        model: typeof parsed.model === "string" ? parsed.model : undefined,
+        effort: provider.thinking.effort ?? (typeof parsed.effort === "string" ? parsed.effort : undefined),
+        model: provider.model ?? (typeof parsed.model === "string" ? parsed.model : undefined),
         codexServiceTier: parsed.codexServiceTier === "fast" ? "fast" : undefined,
+        provider,
       };
     } catch {
-      return {};
+      return defaultProcessEngineOptions();
     }
   }
 
@@ -510,7 +523,7 @@ export class ProcessCodexAdapter implements CodexAdapter {
     }
     const prompt = parts.join("\n");
     const approvalMode = this.configPath ? await this.loadApprovalMode() : "normal";
-    const engineOptions = this.configPath ? await this.loadEngineOptions() : {};
+    const engineOptions = this.configPath ? await this.loadEngineOptions() : defaultProcessEngineOptions();
     const approvalFlags: string[] =
       approvalMode === "bypass"
         ? ["--dangerously-bypass-approvals-and-sandbox"]
@@ -545,6 +558,20 @@ export class ProcessCodexAdapter implements CodexAdapter {
     if (engineOptions.codexServiceTier === "fast") {
       engineFlags.push("--enable", "fast_mode", "-c", 'service_tier="fast"');
     }
+    if (engineOptions.provider.temperature !== undefined) {
+      engineFlags.push("-c", `temperature=${engineOptions.provider.temperature}`);
+    }
+    if (engineOptions.provider.baseUrl) {
+      engineFlags.push("-c", `model_provider.base_url="${engineOptions.provider.baseUrl}"`);
+    }
+    engineFlags.push(...engineOptions.provider.extraArgs);
+
+    const providerEnv = { ...engineOptions.provider.extraEnv };
+    const apiKeyEnv = engineOptions.provider.apiKeyEnv;
+    const apiKeyValue = apiKeyEnv ? process.env[apiKeyEnv] ?? this.childEnv[apiKeyEnv] : undefined;
+    if (apiKeyEnv && apiKeyValue) {
+      providerEnv[apiKeyEnv] = apiKeyValue;
+    }
     const args = isLogicalTelegramSessionId(sessionId)
       ? ["exec", "--json", "--skip-git-repo-check", ...effectiveApprovalFlags, ...engineFlags, "-"]
       : ["exec", "resume", "--json", "--skip-git-repo-check", "--all", ...effectiveApprovalFlags, ...engineFlags, sessionId, "-"];
@@ -557,6 +584,7 @@ export class ProcessCodexAdapter implements CodexAdapter {
       input.disableRuntimeTimeout ? null : this.inactivityTimeoutMs,
       input.extraEnv,
       input.onEngineEvent,
+      providerEnv,
     );
 
     if (result.state.lastTurnFailureMessage) {
@@ -608,12 +636,13 @@ export class ProcessCodexAdapter implements CodexAdapter {
     inactivityTimeoutMs: number | null = this.inactivityTimeoutMs,
     extraEnv?: Record<string, string>,
     onEngineEvent?: (event: EngineStreamEvent) => void | Promise<void>,
+    trustedExtraEnv?: Record<string, string>,
   ): Promise<{ state: CodexTurnState; stderrTail: string; exitCode: number | null }> {
     const invocation = buildCommandInvocation(this.codexExecutable, args);
     const child = this.spawnCodex(invocation.command, invocation.args, {
       stdio: ["pipe", "pipe", "pipe"],
       shell: invocation.shell,
-      env: mergeAllowedTurnExtraEnv(this.childEnv, extraEnv),
+      env: mergeAllowedTurnExtraEnv({ ...this.childEnv, ...trustedExtraEnv }, extraEnv),
       cwd: cwdOverride ?? this.workspacePath,
       windowsHide: true,
     });

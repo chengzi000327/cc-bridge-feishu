@@ -143,6 +143,44 @@ describe("ProcessClaudeAdapter", () => {
     }
   });
 
+  it("maps provider config into Claude CLI args", async () => {
+    const { child, calls, spawnFn } = createSpawnHarness();
+    const root = await mkdtemp(path.join(os.tmpdir(), "cc-telegram-bridge-"));
+    const configPath = path.join(root, "config.json");
+
+    try {
+      await writeFile(configPath, JSON.stringify({
+        provider: {
+          model: "sonnet",
+          thinking: { enabled: true, effort: "high" },
+        },
+      }), "utf8");
+      const adapter = new ProcessClaudeAdapter("claude", {
+        spawnFn,
+        configPath,
+      });
+
+      const promise = adapter.sendUserMessage("telegram-12345", {
+        text: "Hello",
+        files: [],
+      });
+      await waitForSpawn(calls);
+
+      child.stdout.emitData('{"type":"result","result":"ok","session_id":"session-abc"}');
+      child.close(0);
+      await promise;
+
+      expect(calls[0]?.args).toEqual(expect.arrayContaining([
+        "--model",
+        "sonnet",
+        "--effort",
+        "high",
+      ]));
+    } finally {
+      await removeTempRoot(root);
+    }
+  });
+
   it("merges bridge instructions with instance agent instructions", async () => {
     const { child, calls, spawnFn } = createSpawnHarness();
     const root = await mkdtemp(path.join(os.tmpdir(), "cc-telegram-bridge-"));

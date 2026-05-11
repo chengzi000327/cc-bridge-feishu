@@ -152,6 +152,58 @@ describe("ProcessCodexAdapter", () => {
     expect(calls[0]?.options.env?.TELEGRAM_BOT_TOKEN).toBeUndefined();
   });
 
+  it("maps provider config into Codex CLI args and env", async () => {
+    const { spawnCodex, child, calls } = createSpawnHarness();
+    const root = await mkdtemp(path.join(os.tmpdir(), "cc-telegram-bridge-"));
+    const configPath = path.join(root, "config.json");
+    const originalApiKey = process.env.DEEPSEEK_API_KEY;
+
+    try {
+      process.env.DEEPSEEK_API_KEY = "deepseek-secret";
+      await writeFile(configPath, JSON.stringify({
+        provider: {
+          kind: "openai-compatible",
+          model: "deepseek-chat",
+          baseUrl: "https://api.deepseek.com",
+          apiKeyEnv: "DEEPSEEK_API_KEY",
+          temperature: 0.2,
+          thinking: { enabled: true, effort: "medium" },
+          extraEnv: { OPENAI_BASE_URL: "https://api.deepseek.com" },
+          extraArgs: ["--provider-extra"],
+        },
+      }), "utf8");
+      const adapter = new ProcessCodexAdapter("codex", spawnCodex, undefined, undefined, configPath);
+
+      const promise = adapter.sendUserMessage("telegram-12345", {
+        text: "Hello",
+        files: [],
+      });
+      await waitForSpawn(calls);
+
+      child.stdout.emitData('{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}\n');
+      child.close(0);
+      await promise;
+
+      expect(calls[0]?.args).toEqual(expect.arrayContaining([
+        "-m",
+        "deepseek-chat",
+        "-c",
+        'model_reasoning_effort="medium"',
+        "temperature=0.2",
+        'model_provider.base_url="https://api.deepseek.com"',
+        "--provider-extra",
+      ]));
+      expect(calls[0]?.options.env).toMatchObject({
+        OPENAI_BASE_URL: "https://api.deepseek.com",
+        DEEPSEEK_API_KEY: "deepseek-secret",
+      });
+    } finally {
+      if (originalApiKey === undefined) delete process.env.DEEPSEEK_API_KEY;
+      else process.env.DEEPSEEK_API_KEY = originalApiKey;
+      await removeTempRoot(root);
+    }
+  });
+
   it("normalizes quoted Windows codex.cmd paths before invoking cmd.exe", async () => {
     const calls: Array<{
       command: string;
