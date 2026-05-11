@@ -56,4 +56,36 @@ describe("createFeishuWebhookServer", () => {
       text: "你好",
     }));
   });
+
+  it("acknowledges message events before the handler finishes", async () => {
+    let resolveHandler: (() => void) | undefined;
+    const onMessage = vi.fn(() => new Promise<void>((resolve) => {
+      resolveHandler = resolve;
+    }));
+    const server = createFeishuWebhookServer({ verificationToken: "t", onMessage });
+
+    const response = await server.inject({
+      method: "POST",
+      path: "/feishu/events",
+      body: JSON.stringify({
+        token: "t",
+        header: { event_id: "evt_1", event_type: "im.message.receive_v1" },
+        event: {
+          sender: { sender_id: { open_id: "ou_1" } },
+          message: {
+            chat_id: "oc_1",
+            chat_type: "p2p",
+            message_id: "om_1",
+            message_type: "text",
+            content: "{\"text\":\"你好\"}",
+          },
+        },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(onMessage).toHaveBeenCalledOnce();
+    resolveHandler?.();
+  });
 });

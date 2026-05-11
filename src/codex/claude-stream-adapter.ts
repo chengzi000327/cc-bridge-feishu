@@ -127,7 +127,7 @@ const MAX_LINE_BUFFER_BYTES = 1024 * 1024;
 const MAX_STDERR_TAIL_CHARS = 20_000;
 const DEFAULT_IDLE_WORKER_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_IDLE_SWEEP_INTERVAL_MS = 60 * 1000;
-// No timeout — complex tasks (image generation, large projects) can run indefinitely
+const DEFAULT_TURN_TIMEOUT_MS = 3_600_000;
 
 function isLogicalTelegramSessionId(sessionId: string): boolean {
   return sessionId.startsWith("telegram-");
@@ -300,6 +300,7 @@ export class ClaudeStreamAdapter implements CodexAdapter {
   private readonly configPath: string | undefined;
   private readonly workspacePath: string | undefined;
   private readonly idleWorkerTtlMs: number;
+  private readonly turnTimeoutMs: number | null;
   private readonly idleSweepTimer: ReturnType<typeof setInterval> | undefined;
   private readonly workers = new Map<string, ClaudeWorker>();
 
@@ -314,6 +315,7 @@ export class ClaudeStreamAdapter implements CodexAdapter {
       engineHomePath?: string;
       idleWorkerTtlMs?: number;
       idleSweepIntervalMs?: number;
+      turnTimeoutMs?: number | null;
     },
   ) {
     this.childEnv = options?.childEnv ?? (() => {
@@ -330,6 +332,7 @@ export class ClaudeStreamAdapter implements CodexAdapter {
     this.configPath = options?.configPath;
     this.workspacePath = options?.workspacePath;
     this.idleWorkerTtlMs = options?.idleWorkerTtlMs ?? DEFAULT_IDLE_WORKER_TTL_MS;
+    this.turnTimeoutMs = options?.turnTimeoutMs ?? DEFAULT_TURN_TIMEOUT_MS;
 
     const sweepIntervalMs = options?.idleSweepIntervalMs ?? DEFAULT_IDLE_SWEEP_INTERVAL_MS;
     if (this.idleWorkerTtlMs > 0 && sweepIntervalMs > 0) {
@@ -733,6 +736,15 @@ export class ClaudeStreamAdapter implements CodexAdapter {
         pendingTurn.abortSignal = input.abortSignal;
         pendingTurn.abortHandler = onAbort;
         input.abortSignal.addEventListener("abort", onAbort, { once: true });
+      }
+
+      if (!input.disableRuntimeTimeout && this.turnTimeoutMs !== null) {
+        const timeoutMs = this.turnTimeoutMs;
+        pendingTurn.timeout = setTimeout(() => {
+          killProcessTree(worker.child.pid);
+          this.failWorker(worker, new Error(`Claude stream turn timed out after ${Math.max(1, Math.round(timeoutMs / 60_000))} minutes`));
+          this.removeWorker(worker);
+        }, timeoutMs);
       }
 
       worker.child.stdin?.write(

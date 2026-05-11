@@ -16,6 +16,9 @@ import { SessionStore } from "./state/session-store.js";
 import { RuntimeStateStore } from "./state/runtime-state.js";
 import { TelegramApi, withTelegramMessageThread } from "./telegram/api.js";
 import { handleNormalizedTelegramMessage, type TelegramDeliveryContext } from "./telegram/delivery.js";
+import { FeishuApi } from "./feishu/api.js";
+import { handleFeishuMessage } from "./feishu/delivery.js";
+import { createFeishuWebhookServer } from "./feishu/webhook-server.js";
 import { handleTelegramApprovalCommand, isTelegramApprovalCommand } from "./telegram/approval-requests.js";
 import { normalizeUpdate, type NormalizedTelegramMessage } from "./telegram/update-normalizer.js";
 import { getNormalizedTelegramConversationKey, getTelegramConversationLogScope } from "./telegram/conversation-key.js";
@@ -24,6 +27,7 @@ import { normalizeInstanceName } from "./instance.js";
 import { ChatQueue } from "./runtime/chat-queue.js";
 import { classifyFailure } from "./runtime/error-classification.js";
 import { loadInstanceConfig, readValidatedConfigFile } from "./telegram/instance-config.js";
+import { normalizeProviderConfig } from "./provider/provider-config.js";
 
 export interface ServiceDependencies {
   api: TelegramApi;
@@ -33,6 +37,15 @@ export interface ServiceDependencies {
 export interface TelegramServiceContext extends TelegramDeliveryContext {
   chatQueue?: ChatQueue;
   botUsername?: string;
+}
+
+export interface FeishuHttpEnv extends EnvSource {
+  FEISHU_APP_ID?: string;
+  FEISHU_APP_SECRET?: string;
+  FEISHU_VERIFICATION_TOKEN?: string;
+  FEISHU_ENCRYPT_KEY?: string;
+  PORT?: string;
+  HOST?: string;
 }
 
 export interface PollTelegramUpdatesOptions {
@@ -443,6 +456,7 @@ export async function readInstanceRuntimeConfig(configPath: string): Promise<{
   engine: EngineType;
   approvalMode: ApprovalMode;
   codexRuntime: CodexRuntime | undefined;
+  provider: unknown;
 }> {
   const parsed = await readValidatedConfigFile(configPath);
   return {
@@ -455,6 +469,7 @@ export async function readInstanceRuntimeConfig(configPath: string): Promise<{
       parsed.codexRuntime === "process" || parsed.codexRuntime === "app-server"
         ? parsed.codexRuntime
         : undefined,
+    provider: parsed.provider,
   };
 }
 
@@ -635,6 +650,7 @@ async function createAdapter(
 ): Promise<CodexAdapter> {
   const runtimeConfig = await readInstanceRuntimeConfig(configPath);
   const engine = runtimeConfig.engine;
+  const provider = normalizeProviderConfig(runtimeConfig.provider);
   const workspacePath = path.join(config.stateDir, "workspace");
   const approvalMode = runtimeConfig.approvalMode;
   const engineRuntime = resolveEngineRuntime(engine, approvalMode, runtimeConfig.codexRuntime);
@@ -667,6 +683,7 @@ async function createAdapter(
       instructionsPath,
       configPath,
       workspacePath,
+      turnTimeoutMs: provider.timeoutMs,
     });
   }
 
@@ -684,16 +701,30 @@ async function createAdapter(
       instructionsPath,
       undefined,
       configPath,
+      provider.timeoutMs,
+      provider.inactivityTimeoutMs,
     );
   }
 
   await mkdir(workspacePath, { recursive: true });
-  return new ProcessCodexAdapter(config.codexExecutable, childEnv, undefined, instructionsPath, configPath, undefined, workspacePath);
+  return new ProcessCodexAdapter(
+    config.codexExecutable,
+    childEnv,
+    undefined,
+    instructionsPath,
+    configPath,
+    undefined,
+    workspacePath,
+    provider.timeoutMs,
+    provider.inactivityTimeoutMs,
+  );
 }
 
-export async function createServiceDependencies(env: EnvSource): Promise<{ config: ReturnType<typeof resolveConfig>; api: TelegramApi; bridge: Bridge }> {
-  const config = resolveConfig(env);
-  const api = new TelegramApi(config.telegramBotToken);
+export async function createBridgeServiceDependencies(env: EnvSource): Promise<{ config: ReturnType<typeof resolveConfig>; bridge: Bridge }> {
+  const config = resolveConfig({
+    ...env,
+    TELEGRAM_BOT_TOKEN: env.TELEGRAM_BOT_TOKEN ?? "__feishu_http_mode__",
+  });
   const accessStore = new AccessStore(config.accessStatePath);
   const sessionStore = new SessionStore(config.sessionStatePath);
   const instructionsPath = path.join(config.stateDir, "agent.md");
@@ -704,6 +735,14 @@ export async function createServiceDependencies(env: EnvSource): Promise<{ confi
     loadGroupMode: async () => (await loadInstanceConfig(config.stateDir)).groupMode,
     loadProviderRetry: async () => (await loadInstanceConfig(config.stateDir)).provider.retries,
   });
+
+  return { config, bridge };
+}
+
+export async function createServiceDependencies(env: EnvSource): Promise<{ config: ReturnType<typeof resolveConfig>; api: TelegramApi; bridge: Bridge }> {
+  const config = resolveConfig(env);
+  const api = new TelegramApi(config.telegramBotToken);
+  const { bridge } = await createBridgeServiceDependencies(env);
 
   return { config, api, bridge };
 }
@@ -760,6 +799,7 @@ export async function lookupTelegramBotIdentity(api: TelegramApi): Promise<Resol
 
 const defaultChatQueue = new ChatQueue();
 const activeTasks = new Map<string | number, AbortController>();
+const feishuDedupStates = new Map<string, Set<string>>();
 const updateDedupStates = new Map<string, {
   enqueuedUpdateIds: Set<number>;
   completedOutOfOrderUpdateIds: Set<number>;
@@ -779,6 +819,11 @@ export function _resetEnqueuedUpdateIds(): void {
 /** @internal — test-only reset for module-level stopped-task state */
 export function _resetStoppedTaskChats(): void {
   stoppedTaskChats.clear();
+}
+
+/** @internal — test-only reset for module-level Feishu dedup state */
+export function _resetFeishuDedupState(): void {
+  feishuDedupStates.clear();
 }
 
 export function abortChatTask(chatId: number | string, chatQueue: ChatQueue = defaultChatQueue): boolean {
@@ -808,6 +853,16 @@ function getUpdateDedupState(inboxDir: string): {
       completedOutOfOrderUpdateIds: new Set<number>(),
     };
     updateDedupStates.set(stateKey, state);
+  }
+  return state;
+}
+
+function getFeishuDedupState(inboxDir: string): Set<string> {
+  const stateKey = path.resolve(inboxDir);
+  let state = feishuDedupStates.get(stateKey);
+  if (!state) {
+    state = new Set<string>();
+    feishuDedupStates.set(stateKey, state);
   }
   return state;
 }
@@ -854,6 +909,114 @@ export async function runQueuedTelegramTurn(
       },
     },
   );
+}
+
+export async function runQueuedFeishuTurn(
+  message: import("./transport/types.js").BridgeMessage,
+  context: {
+    api: FeishuApi;
+    bridge: Bridge;
+    inboxDir: string;
+    abortSignal?: AbortSignal;
+  },
+  chatQueue: ChatQueue = defaultChatQueue,
+): Promise<void> {
+  const dedup = getFeishuDedupState(context.inboxDir);
+  if (dedup.has(message.updateId)) {
+    return;
+  }
+  dedup.add(message.updateId);
+
+  await chatQueue.enqueue(message.conversationKey, async () => {
+    if (context.abortSignal?.aborted) {
+      throw new Error("queued Feishu turn was aborted before execution");
+    }
+
+    const taskController = new AbortController();
+    const forwardAbort = () => taskController.abort();
+    context.abortSignal?.addEventListener("abort", forwardAbort, { once: true });
+
+    activeTasks.set(message.conversationKey, taskController);
+    await getRuntimeStateStore(context.inboxDir).markTurnStarted();
+    try {
+      await handleFeishuMessage(message, {
+        ...context,
+        abortSignal: taskController.signal,
+      });
+    } finally {
+      context.abortSignal?.removeEventListener("abort", forwardAbort);
+      if (activeTasks.get(message.conversationKey) === taskController) {
+        activeTasks.delete(message.conversationKey);
+      }
+      await getRuntimeStateStore(context.inboxDir).markTurnCompleted();
+    }
+  }, {
+    onSkipped: () => {
+      throw new Error("queued Feishu turn was skipped before execution");
+    },
+  });
+}
+
+function parseListenPort(value: string | undefined): number {
+  if (!value) {
+    return 3000;
+  }
+  const port = Number(value);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error(`Invalid PORT: ${value}`);
+  }
+  return port;
+}
+
+export async function runFeishuHttpService(input: {
+  env: FeishuHttpEnv;
+  bridge: Bridge;
+  inboxDir: string;
+  abortSignal?: AbortSignal;
+  logger?: Pick<Console, "log">;
+}): Promise<void> {
+  const appId = input.env.FEISHU_APP_ID;
+  const appSecret = input.env.FEISHU_APP_SECRET;
+  if (!appId || !appSecret) {
+    throw new Error("FEISHU_APP_ID and FEISHU_APP_SECRET are required");
+  }
+
+  const api = new FeishuApi({ appId, appSecret });
+  const server = createFeishuWebhookServer({
+    verificationToken: input.env.FEISHU_VERIFICATION_TOKEN,
+    encryptKey: input.env.FEISHU_ENCRYPT_KEY,
+    onMessage: async (message) => {
+      await runQueuedFeishuTurn(message, {
+        api,
+        bridge: input.bridge,
+        inboxDir: input.inboxDir,
+        abortSignal: input.abortSignal,
+      });
+    },
+    onMessageError: (error, message) => {
+      console.error(`Feishu message ${message.updateId} failed:`, error instanceof Error ? error.message : error);
+    },
+  });
+
+  const port = parseListenPort(input.env.PORT);
+  const host = input.env.HOST ?? "0.0.0.0";
+  const httpServer = server.listen(port, host);
+  input.logger?.log(`Feishu webhook server listening on ${host}:${port}`);
+
+  await new Promise<void>((resolve, reject) => {
+    const close = () => {
+      httpServer.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    };
+
+    input.abortSignal?.addEventListener("abort", close, { once: true });
+    httpServer.on("error", reject);
+  });
 }
 const runtimeStateStoreCache = new Map<string, RuntimeStateStore>();
 

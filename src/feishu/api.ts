@@ -98,9 +98,14 @@ export class FeishuApi implements BridgeApi {
   async downloadAttachment(attachment: BridgeAttachment, targetPath: string): Promise<void> {
     await mkdir(path.dirname(targetPath), { recursive: true });
     const token = await this.tenantAccessToken();
-    const response = await this.fetchImpl(`${this.apiBaseUrl}/im/v1/messages/${attachment.id}/resources/${attachment.id}`, {
+    const messageId = attachment.sourceMessageId ?? attachment.id;
+    const resourceType = attachment.resourceType ?? (attachment.kind === "image" ? "image" : "file");
+    const response = await this.fetchImpl(
+      `${this.apiBaseUrl}/im/v1/messages/${encodeURIComponent(messageId)}/resources/${encodeURIComponent(attachment.id)}?type=${encodeURIComponent(resourceType)}`,
+      {
       headers: { Authorization: `Bearer ${token}` },
-    });
+      },
+    );
 
     if (!response.ok) {
       throw new Error(`Feishu attachment download failed: ${response.status} ${response.statusText}`);

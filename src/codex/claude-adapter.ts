@@ -71,6 +71,7 @@ interface ClaudeJsonResult {
 }
 
 const MAX_INSTRUCTIONS_CHARS = 16_000;
+const DEFAULT_TURN_TIMEOUT_MS = 3_600_000;
 
 function isLogicalTelegramSessionId(sessionId: string): boolean {
   return sessionId.startsWith("telegram-");
@@ -214,6 +215,7 @@ export class ProcessClaudeAdapter implements CodexAdapter {
   private readonly instructionsPath: string | undefined;
   private readonly configPath: string | undefined;
   private readonly workspacePath: string | undefined;
+  private readonly turnTimeoutMs: number | null;
 
   constructor(
     private readonly claudeExecutable: string,
@@ -224,6 +226,7 @@ export class ProcessClaudeAdapter implements CodexAdapter {
       configPath?: string;
       workspacePath?: string;
       engineHomePath?: string;
+      turnTimeoutMs?: number | null;
     },
   ) {
     this.childEnv = options?.childEnv ?? (() => {
@@ -243,6 +246,7 @@ export class ProcessClaudeAdapter implements CodexAdapter {
     this.instructionsPath = options?.instructionsPath;
     this.configPath = options?.configPath;
     this.workspacePath = options?.workspacePath;
+    this.turnTimeoutMs = options?.turnTimeoutMs ?? DEFAULT_TURN_TIMEOUT_MS;
   }
 
   async createSession(chatId: number): Promise<CodexSessionHandle> {
@@ -377,7 +381,8 @@ export class ProcessClaudeAdapter implements CodexAdapter {
       );
     }
 
-    const result = await this.runClaudeCommand(args, prompt, input.abortSignal, effectiveWorkspace, input.extraEnv).finally(async () => {
+    const runtimeTimeoutMs = input.disableRuntimeTimeout ? null : this.turnTimeoutMs;
+    const result = await this.runClaudeCommand(args, prompt, input.abortSignal, effectiveWorkspace, input.extraEnv, runtimeTimeoutMs).finally(async () => {
       await permissionHookServer?.close();
     });
     const parsed = this.parseResult(result.stdout, {
@@ -505,7 +510,14 @@ export class ProcessClaudeAdapter implements CodexAdapter {
     }
   }
 
-  private async runClaudeCommand(args: string[], stdinContent: string, abortSignal?: AbortSignal, cwdOverride?: string, extraEnv?: Record<string, string>): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
+  private async runClaudeCommand(
+    args: string[],
+    stdinContent: string,
+    abortSignal?: AbortSignal,
+    cwdOverride?: string,
+    extraEnv?: Record<string, string>,
+    timeoutMs: number | null = this.turnTimeoutMs,
+  ): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
     const invocation = buildCommandInvocation(this.claudeExecutable, args);
     const child = this.spawnClaude(invocation.command, invocation.args, {
       stdio: ["pipe", "pipe", "pipe"],
@@ -519,6 +531,7 @@ export class ProcessClaudeAdapter implements CodexAdapter {
       let stdout = "";
       let stderr = "";
       let settled = false;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
 
       const resolveOnce = (value: { stdout: string; stderr: string; exitCode: number | null }) => {
         if (settled) {
@@ -526,6 +539,9 @@ export class ProcessClaudeAdapter implements CodexAdapter {
         }
 
         settled = true;
+        if (timeout) {
+          clearTimeout(timeout);
+        }
         resolve(value);
       };
 
@@ -535,6 +551,9 @@ export class ProcessClaudeAdapter implements CodexAdapter {
         }
 
         settled = true;
+        if (timeout) {
+          clearTimeout(timeout);
+        }
         reject(error);
       };
 
@@ -545,6 +564,13 @@ export class ProcessClaudeAdapter implements CodexAdapter {
         };
         if (abortSignal.aborted) { onAbort(); return; }
         abortSignal.addEventListener("abort", onAbort, { once: true });
+      }
+
+      if (timeoutMs !== null) {
+        timeout = setTimeout(() => {
+          killProcessTree(child.pid);
+          rejectOnce(new Error(`Claude process turn timed out after ${Math.max(1, Math.round(timeoutMs / 60_000))} minutes`));
+        }, timeoutMs);
       }
 
       child.stdout?.on("data", (chunk) => {

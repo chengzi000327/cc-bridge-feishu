@@ -8,12 +8,14 @@ import { recoverLastHandledUpdateIdFromAudit } from "./state/runtime-state-recov
 import { FileWorkflowStore } from "./state/file-workflow-store.js";
 import { resolveConfig } from "./config.js";
 import {
+  createBridgeServiceDependencies,
   createServiceDependencies,
   lookupTelegramBotIdentity,
   parseServiceInstanceName,
   pollTelegramUpdates,
   registerBotCommands,
   resolveServiceEnvForInstance,
+  runFeishuHttpService,
   runQueuedTelegramTurn,
 } from "./service.js";
 import { loadBusConfig } from "./bus/bus-config.js";
@@ -35,6 +37,10 @@ function renderLifecycleError(error: unknown): string {
   return String(error);
 }
 
+function isFeishuHttpMode(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(env.FEISHU_APP_ID && env.FEISHU_APP_SECRET);
+}
+
 async function main(): Promise<void> {
   let logLifecycleEvent: (input: Parameters<typeof appendServiceLifecycleEventSync>[1]) => void = () => {};
   let removeUncaughtExceptionMonitor: (() => void) | undefined;
@@ -52,20 +58,25 @@ async function main(): Promise<void> {
     }
 
     const instanceName = parseServiceInstanceName(argv);
-    const resolvedEnv = await resolveServiceEnvForInstance(
-      {
-        HOME: process.env.HOME,
-        APPDATA: process.env.APPDATA,
-        USERPROFILE: process.env.USERPROFILE,
-        CODEX_HOME: process.env.CODEX_HOME,
-        CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
-        CODEX_TELEGRAM_STATE_DIR: process.env.CODEX_TELEGRAM_STATE_DIR,
-        CODEX_EXECUTABLE: process.env.CODEX_EXECUTABLE,
-        CLAUDE_EXECUTABLE: process.env.CLAUDE_EXECUTABLE,
-        TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
-      },
-      instanceName,
-    );
+    const feishuHttpMode = isFeishuHttpMode(process.env);
+    const baseEnv = {
+      HOME: process.env.HOME,
+      APPDATA: process.env.APPDATA,
+      USERPROFILE: process.env.USERPROFILE,
+      CODEX_HOME: process.env.CODEX_HOME,
+      CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
+      CODEX_TELEGRAM_INSTANCE: instanceName,
+      CODEX_TELEGRAM_STATE_DIR: process.env.CODEX_TELEGRAM_STATE_DIR,
+      CODEX_EXECUTABLE: process.env.CODEX_EXECUTABLE,
+      CLAUDE_EXECUTABLE: process.env.CLAUDE_EXECUTABLE,
+      TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+    };
+    const resolvedEnv = feishuHttpMode
+      ? {
+        ...baseEnv,
+        TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN ?? "__feishu_http_mode__",
+      }
+      : await resolveServiceEnvForInstance(baseEnv, instanceName);
 
     const serviceConfig = resolveConfig(resolvedEnv);
     logLifecycleEvent = (event) => appendServiceLifecycleEventSync(serviceConfig.stateDir, event);
@@ -173,6 +184,59 @@ async function main(): Promise<void> {
         outcome: "error",
         detail: renderLifecycleError(error),
       });
+    }
+
+    if (feishuHttpMode) {
+      const { bridge, config } = await createBridgeServiceDependencies(resolvedEnv);
+      const instanceConfig = await loadInstanceConfig(config.stateDir);
+      try {
+        await pruneStaleTelegramRuntimeDirs(config.stateDir, instanceConfig.resume?.workspacePath);
+      } catch (error) {
+        logLifecycleEvent({
+          type: "service.startup_maintenance",
+          instanceName,
+          outcome: "error",
+          detail: renderLifecycleError(error),
+        });
+      }
+
+      logLifecycleEvent({
+        type: "service.started",
+        instanceName,
+        outcome: "success",
+        detail: "feishu http",
+      });
+
+      try {
+        await runFeishuHttpService({
+          env: {
+            ...resolvedEnv,
+            FEISHU_APP_ID: process.env.FEISHU_APP_ID,
+            FEISHU_APP_SECRET: process.env.FEISHU_APP_SECRET,
+            FEISHU_VERIFICATION_TOKEN: process.env.FEISHU_VERIFICATION_TOKEN,
+            FEISHU_ENCRYPT_KEY: process.env.FEISHU_ENCRYPT_KEY,
+            PORT: process.env.PORT,
+            HOST: process.env.HOST,
+          },
+          bridge,
+          inboxDir: config.inboxDir,
+          abortSignal: abortController.signal,
+          logger: console,
+        });
+      } finally {
+        logLifecycleEvent({
+          type: "service.stopped",
+          instanceName,
+          outcome: "success",
+          detail: "feishu http",
+        });
+        process.removeListener("SIGTERM", shutdownSigterm);
+        process.removeListener("SIGINT", shutdownSigint);
+        process.removeListener("exit", releaseLockOnExit);
+        removeUncaughtExceptionMonitor?.();
+        await instanceLock.release();
+      }
+      return;
     }
 
     const { api, bridge, config } = await createServiceDependencies(resolvedEnv);

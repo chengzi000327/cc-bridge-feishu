@@ -27,17 +27,17 @@ function optionalName(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-function normalizeAttachments(messageType: string, content: Record<string, unknown>): BridgeAttachment[] {
+function normalizeAttachments(messageId: string, messageType: string, content: Record<string, unknown>): BridgeAttachment[] {
   if (messageType === "image" && typeof content.image_key === "string") {
-    return [{ id: content.image_key, kind: "image" }];
+    return [{ id: content.image_key, kind: "image", sourceMessageId: messageId, resourceType: "image" }];
   }
 
   if (messageType === "audio" && typeof content.file_key === "string") {
-    return [{ id: content.file_key, name: optionalName(content.file_name), kind: "audio" }];
+    return [{ id: content.file_key, name: optionalName(content.file_name), kind: "audio", sourceMessageId: messageId, resourceType: "file" }];
   }
 
   if (messageType === "file" && typeof content.file_key === "string") {
-    return [{ id: content.file_key, name: optionalName(content.file_name), kind: "document" }];
+    return [{ id: content.file_key, name: optionalName(content.file_name), kind: "document", sourceMessageId: messageId, resourceType: "file" }];
   }
 
   return [];
@@ -103,7 +103,7 @@ export function normalizeFeishuEvent(body: unknown): NormalizedFeishuEvent {
       threadId,
       conversationKey,
       text: normalizeText(messageType, content),
-      attachments: normalizeAttachments(messageType, content),
+      attachments: normalizeAttachments(message.message_id, messageType, content),
     },
   };
 }

@@ -66,12 +66,32 @@ describe("FeishuApi", () => {
     const targetPath = path.join(dir, "nested", "voice.bin");
     await mkdir(dir, { recursive: true });
 
-    await api.downloadAttachment({ id: "om_1", kind: "voice" }, targetPath);
+    await api.downloadAttachment({ id: "file_v2_1", sourceMessageId: "om_1", resourceType: "file", kind: "voice" }, targetPath);
 
     expect(await readFile(targetPath)).toEqual(Buffer.from(bytes));
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
-      "https://open.feishu.cn/open-apis/im/v1/messages/om_1/resources/om_1",
+      "https://open.feishu.cn/open-apis/im/v1/messages/om_1/resources/file_v2_1?type=file",
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: "Bearer tat" }),
+      }),
+    );
+  });
+
+  it("uses image resource type when downloading image attachments", async () => {
+    const bytes = new Uint8Array([5, 6]);
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: 0, tenant_access_token: "tat", expire: 7200 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(bytes, { status: 200 }));
+    const api = new FeishuApi({ appId: "app", appSecret: "secret", fetchImpl });
+    const dir = path.join(tmpdir(), `feishu-api-image-${process.pid}-${Date.now()}`);
+    const targetPath = path.join(dir, "image.bin");
+
+    await api.downloadAttachment({ id: "img_v2_1", sourceMessageId: "om_img", kind: "image", resourceType: "image" }, targetPath);
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "https://open.feishu.cn/open-apis/im/v1/messages/om_img/resources/img_v2_1?type=image",
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: "Bearer tat" }),
       }),

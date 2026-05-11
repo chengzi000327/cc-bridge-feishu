@@ -8,6 +8,7 @@ export interface FeishuWebhookOptions {
   verificationToken?: string;
   encryptKey?: string;
   onMessage(message: BridgeMessage): Promise<void>;
+  onMessageError?(error: unknown, message: BridgeMessage): void;
 }
 
 async function readJson(req: http.IncomingMessage): Promise<unknown> {
@@ -42,7 +43,9 @@ async function handleRequest(
   }
 
   if (event.kind === "message") {
-    await options.onMessage(event.message);
+    void Promise.resolve(options.onMessage(event.message)).catch((error) => {
+      options.onMessageError?.(error, event.message);
+    });
   }
 
   return { status: 200, body: { ok: true } };

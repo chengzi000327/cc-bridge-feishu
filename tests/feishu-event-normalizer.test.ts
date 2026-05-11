@@ -59,7 +59,7 @@ describe("normalizeFeishuEvent", () => {
       message: {
         chatType: "group",
         text: "",
-        attachments: [{ id: "file_v2_1", name: "report.pdf", kind: "document" }],
+        attachments: [{ id: "file_v2_1", name: "report.pdf", kind: "document", sourceMessageId: "om_2", resourceType: "file" }],
       },
     });
   });
@@ -83,7 +83,7 @@ describe("normalizeFeishuEvent", () => {
       kind: "message",
       message: {
         text: "",
-        attachments: [{ id: "img_v2_1", kind: "image" }],
+        attachments: [{ id: "img_v2_1", kind: "image", sourceMessageId: "om_3", resourceType: "image" }],
       },
     });
   });
@@ -107,7 +107,7 @@ describe("normalizeFeishuEvent", () => {
       kind: "message",
       message: {
         text: "",
-        attachments: [{ id: "audio_v2_1", name: "voice.opus", kind: "audio" }],
+        attachments: [{ id: "audio_v2_1", name: "voice.opus", kind: "audio", sourceMessageId: "om_4", resourceType: "file" }],
       },
     });
   });

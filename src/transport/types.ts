@@ -5,6 +5,8 @@ export interface BridgeAttachment {
   name?: string;
   kind: "audio" | "document" | "image" | "voice";
   mimeType?: string;
+  sourceMessageId?: string;
+  resourceType?: "file" | "image";
 }
 
 export interface BridgeReplyContext {
