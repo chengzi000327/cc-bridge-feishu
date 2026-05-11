@@ -7,6 +7,7 @@ import {
   formatSchemaError,
   type ConfigFile,
 } from "../state/config-file-schema.js";
+import { normalizeProviderConfig, type ProviderConfig } from "../provider/provider-config.js";
 import { normalizeCronTimezone, resolveDefaultCronTimezone } from "../state/cron-timezone.js";
 import { withFileMutex } from "../state/file-mutex.js";
 
@@ -34,6 +35,7 @@ export interface InstanceConfig {
   timezone: string;
   resume: ResumeState | undefined;
   groupMode: GroupModeConfig;
+  provider: ProviderConfig;
 }
 
 export interface GroupModeConfig {
@@ -73,6 +75,7 @@ export const DEFAULT_INSTANCE_CONFIG: InstanceConfig = {
     allowedChatIds: [],
     listenAllChatIds: [],
   },
+  provider: normalizeProviderConfig(undefined),
 };
 
 function parseGroupMode(raw: unknown): GroupModeConfig {
@@ -168,6 +171,7 @@ export async function loadInstanceConfig(stateDir: string): Promise<InstanceConf
     timezone: normalizeCronTimezone(config.timezone) ?? DEFAULT_INSTANCE_CONFIG.timezone,
     resume: parseResumeState(config.resume),
     groupMode: parseGroupMode(config.groupMode),
+    provider: normalizeProviderConfig(config.provider),
   };
 }
 

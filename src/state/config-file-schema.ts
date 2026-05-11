@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { ProviderConfigSchema } from "../provider/provider-config.js";
+
 export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
 
 export const ResumeStateFileSchema = z.object({
@@ -28,6 +30,7 @@ export const ConfigFileSchema = z.object({
   timezone: z.string().optional(),
   resume: ResumeStateFileSchema.optional(),
   groupMode: GroupModeFileSchema.optional(),
+  provider: ProviderConfigSchema.optional(),
   bus: z.unknown().optional(),
 }).passthrough();
 

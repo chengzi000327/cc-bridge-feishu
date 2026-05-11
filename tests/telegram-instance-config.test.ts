@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { loadInstanceConfig, updateInstanceConfig } from "../src/telegram/instance-config.js";
 import { resolveDefaultCronTimezone } from "../src/state/cron-timezone.js";
+import { normalizeProviderConfig } from "../src/provider/provider-config.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -32,6 +33,7 @@ describe("loadInstanceConfig", () => {
           allowedChatIds: [],
           listenAllChatIds: [],
         },
+        provider: normalizeProviderConfig(undefined),
       });
     } finally {
       await removeTempRoot(root);
@@ -60,6 +62,7 @@ describe("loadInstanceConfig", () => {
           allowedChatIds: [],
           listenAllChatIds: [],
         },
+        provider: normalizeProviderConfig(undefined),
       });
       expect(errorSpy).toHaveBeenCalledOnce();
     } finally {
@@ -89,6 +92,7 @@ describe("loadInstanceConfig", () => {
           allowedChatIds: [],
           listenAllChatIds: [],
         },
+        provider: normalizeProviderConfig(undefined),
       });
       expect(errorSpy).toHaveBeenCalledOnce();
     } finally {
@@ -145,6 +149,7 @@ describe("loadInstanceConfig", () => {
           allowedChatIds: [-100123],
           listenAllChatIds: [-100123],
         },
+        provider: normalizeProviderConfig(undefined),
       });
     } finally {
       await removeTempRoot(root);
@@ -173,6 +178,7 @@ describe("loadInstanceConfig", () => {
           allowedChatIds: [],
           listenAllChatIds: [],
         },
+        provider: normalizeProviderConfig(undefined),
       });
       expect(errorSpy).toHaveBeenCalledOnce();
     } finally {
