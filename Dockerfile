@@ -13,7 +13,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV BRIDGE_HOME=/data/cc-bridge-feishu
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev \
+  && npm install -g @openai/codex@0.130.0 @anthropic-ai/claude-code@2.1.139
 COPY --from=build /app/dist dist/
 COPY scripts/ scripts/
 EXPOSE 3000
