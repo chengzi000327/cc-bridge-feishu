@@ -43,6 +43,41 @@ const MAX_INSTRUCTIONS_CHARS = 16_000;
 const MAX_LINE_BUFFER_BYTES = 1024 * 1024;
 const MAX_PROTOCOL_LINE_BUFFER_BYTES = 64 * 1024 * 1024;
 const MAX_DIAGNOSTIC_CHARS = 4_000;
+
+function tomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function providerConfigKey(name: string | undefined): string {
+  const normalized = (name ?? "custom").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized || "custom";
+}
+
+function pushCustomProviderFlags(
+  args: string[],
+  provider: {
+    name?: string;
+    baseUrl?: string;
+    apiKeyEnv?: string;
+  },
+): void {
+  if (!provider.baseUrl) return;
+
+  const key = providerConfigKey(provider.name);
+  args.push(
+    "-c",
+    `model_provider=${tomlString(key)}`,
+    "-c",
+    `model_providers.${key}.name=${tomlString(provider.name ?? key)}`,
+    "-c",
+    `model_providers.${key}.base_url=${tomlString(provider.baseUrl)}`,
+    "-c",
+    `model_providers.${key}.wire_api="chat"`,
+  );
+  if (provider.apiKeyEnv) {
+    args.push("-c", `model_providers.${key}.env_key=${tomlString(provider.apiKeyEnv)}`);
+  }
+}
 export const CODEX_APP_SERVER_TURN_TIMEOUT_MS = 60 * 60_000;
 export const CODEX_APP_SERVER_INACTIVITY_TIMEOUT_MS = 15 * 60_000;
 export const CODEX_APP_SERVER_INITIALIZE_TIMEOUT_MS = 30_000;
@@ -371,9 +406,7 @@ export class CodexAppServerAdapter implements CodexAdapter {
       initializeArgs.push("-c", `temperature=${provider.temperature}`);
     }
 
-    if (provider.baseUrl) {
-      initializeArgs.push("-c", `model_provider.base_url="${provider.baseUrl}"`);
-    }
+    pushCustomProviderFlags(initializeArgs, provider);
 
     initializeArgs.push(...provider.extraArgs);
 

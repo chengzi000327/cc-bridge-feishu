@@ -79,6 +79,8 @@ async function bootstrapFeishuRailwayState(input: {
   codexHome?: string;
   claudeConfigDir?: string;
   allowedChatIds?: string;
+  allowedGroupChatIds?: string;
+  allowedUserIds?: string;
   hasDeepseekKey: boolean;
 }): Promise<void> {
   await mkdir(input.stateDir, { recursive: true });
@@ -87,7 +89,9 @@ async function bootstrapFeishuRailwayState(input: {
   if (input.claudeConfigDir) await mkdir(input.claudeConfigDir, { recursive: true });
 
   const allowlist = parseFeishuAllowedChatIds(input.allowedChatIds);
-  if (allowlist.length > 0) {
+  const allowedUsers = parseFeishuAllowedChatIds(input.allowedUserIds);
+  const accessAllowlist = [...new Set([...allowlist, ...allowedUsers])];
+  if (accessAllowlist.length > 0) {
     const accessPath = path.join(input.stateDir, "access.json");
     const existing = await readJsonFile(accessPath);
     const existingAllowlist = Array.isArray(existing?.allowlist)
@@ -95,18 +99,20 @@ async function bootstrapFeishuRailwayState(input: {
       : [];
     await writeFile(accessPath, JSON.stringify({
       schemaVersion: 1,
-      multiChat: allowlist.length > 1 || existing?.multiChat === true,
+      multiChat: accessAllowlist.length > 1 || existing?.multiChat === true,
       policy: "allowlist",
       pairedUsers: Array.isArray(existing?.pairedUsers) ? existing.pairedUsers : [],
-      allowlist: [...new Set([...existingAllowlist, ...allowlist])],
+      allowlist: [...new Set([...existingAllowlist, ...accessAllowlist])],
       pendingPairs: Array.isArray(existing?.pendingPairs) ? existing.pendingPairs : [],
     }, null, 2));
   }
 
   const configPath = path.join(input.stateDir, "config.json");
   const existingConfig = await readJsonFile(configPath);
+  let configChanged = false;
+  const config = existingConfig ?? {};
   if (!existingConfig && input.hasDeepseekKey) {
-    await writeFile(configPath, JSON.stringify({
+    Object.assign(config, {
       engine: "codex",
       codexRuntime: "process",
       locale: "zh",
@@ -123,7 +129,31 @@ async function bootstrapFeishuRailwayState(input: {
         inactivityTimeoutMs: 300000,
         retries: { maxAttempts: 2, baseDelayMs: 1000, maxDelayMs: 10000 },
       },
-    }, null, 2));
+    });
+    configChanged = true;
+  }
+
+  const allowedGroups = parseFeishuAllowedChatIds(input.allowedGroupChatIds);
+  if (allowedGroups.length > 0) {
+    const groupMode = typeof config.groupMode === "object" && config.groupMode !== null
+      ? config.groupMode as Record<string, unknown>
+      : {};
+    const existingAllowedGroups = Array.isArray(groupMode.allowedChatIds)
+      ? groupMode.allowedChatIds.filter((entry): entry is number => Number.isInteger(entry))
+      : [];
+    config.groupMode = {
+      enabled: true,
+      ...groupMode,
+      allowedChatIds: [...new Set([...existingAllowedGroups, ...allowedGroups])],
+      listenAllChatIds: Array.isArray(groupMode.listenAllChatIds)
+        ? groupMode.listenAllChatIds.filter((entry): entry is number => Number.isInteger(entry))
+        : [],
+    };
+    configChanged = true;
+  }
+
+  if (configChanged) {
+    await writeFile(configPath, JSON.stringify(config, null, 2));
   }
 }
 
@@ -171,6 +201,8 @@ async function main(): Promise<void> {
         codexHome: resolvedEnv.CODEX_HOME,
         claudeConfigDir: resolvedEnv.CLAUDE_CONFIG_DIR,
         allowedChatIds: process.env.FEISHU_ALLOWED_CHAT_IDS,
+        allowedGroupChatIds: process.env.FEISHU_ALLOWED_GROUP_CHAT_IDS,
+        allowedUserIds: process.env.FEISHU_ALLOWED_USER_IDS,
         hasDeepseekKey: Boolean(process.env.DEEPSEEK_API_KEY),
       });
     }

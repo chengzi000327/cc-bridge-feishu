@@ -260,6 +260,42 @@ function combineInstructions(primary: string | null, secondary: string | null): 
   return parts.length > 0 ? parts.join("\n\n") : null;
 }
 
+function tomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function providerConfigKey(name: string | undefined): string {
+  const normalized = (name ?? "custom").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized || "custom";
+}
+
+function pushCustomProviderFlags(
+  engineFlags: string[],
+  provider: {
+    name?: string;
+    baseUrl?: string;
+    apiKeyEnv?: string;
+    kind?: string;
+  },
+): void {
+  if (!provider.baseUrl) return;
+
+  const key = providerConfigKey(provider.name);
+  engineFlags.push(
+    "-c",
+    `model_provider=${tomlString(key)}`,
+    "-c",
+    `model_providers.${key}.name=${tomlString(provider.name ?? key)}`,
+    "-c",
+    `model_providers.${key}.base_url=${tomlString(provider.baseUrl)}`,
+    "-c",
+    `model_providers.${key}.wire_api="chat"`,
+  );
+  if (provider.apiKeyEnv) {
+    engineFlags.push("-c", `model_providers.${key}.env_key=${tomlString(provider.apiKeyEnv)}`);
+  }
+}
+
 export class ProcessCodexAdapter implements CodexAdapter {
   readonly bridgeInstructionMode = "telegram-out-only" as const;
   readonly supportsTurnScopedEnv = true;
@@ -561,9 +597,7 @@ export class ProcessCodexAdapter implements CodexAdapter {
     if (engineOptions.provider.temperature !== undefined) {
       engineFlags.push("-c", `temperature=${engineOptions.provider.temperature}`);
     }
-    if (engineOptions.provider.baseUrl) {
-      engineFlags.push("-c", `model_provider.base_url="${engineOptions.provider.baseUrl}"`);
-    }
+    pushCustomProviderFlags(engineFlags, engineOptions.provider);
     engineFlags.push(...engineOptions.provider.extraArgs);
 
     const providerEnv = { ...engineOptions.provider.extraEnv };

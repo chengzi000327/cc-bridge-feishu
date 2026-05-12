@@ -190,7 +190,11 @@ describe("ProcessCodexAdapter", () => {
         "-c",
         'model_reasoning_effort="medium"',
         "temperature=0.2",
-        'model_provider.base_url="https://api.deepseek.com"',
+        'model_provider="custom"',
+        'model_providers.custom.name="custom"',
+        'model_providers.custom.base_url="https://api.deepseek.com"',
+        'model_providers.custom.wire_api="chat"',
+        'model_providers.custom.env_key="DEEPSEEK_API_KEY"',
         "--provider-extra",
       ]));
       expect(calls[0]?.options.env).toMatchObject({
