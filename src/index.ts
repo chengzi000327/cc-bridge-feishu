@@ -96,7 +96,7 @@ async function bootstrapFeishuRailwayState(input: {
     await writeFile(accessPath, JSON.stringify({
       schemaVersion: 1,
       multiChat: allowlist.length > 1 || existing?.multiChat === true,
-      policy: existing?.policy === "allowlist" ? "allowlist" : "pairing",
+      policy: "allowlist",
       pairedUsers: Array.isArray(existing?.pairedUsers) ? existing.pairedUsers : [],
       allowlist: [...new Set([...existingAllowlist, ...allowlist])],
       pendingPairs: Array.isArray(existing?.pendingPairs) ? existing.pendingPairs : [],
