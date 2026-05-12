@@ -289,7 +289,7 @@ function pushCustomProviderFlags(
     "-c",
     `model_providers.${key}.base_url=${tomlString(provider.baseUrl)}`,
     "-c",
-    `model_providers.${key}.wire_api="chat"`,
+    `model_providers.${key}.wire_api="responses"`,
   );
   if (provider.apiKeyEnv) {
     engineFlags.push("-c", `model_providers.${key}.env_key=${tomlString(provider.apiKeyEnv)}`);
