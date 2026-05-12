@@ -78,6 +78,7 @@ async function bootstrapFeishuRailwayState(input: {
   stateDir: string;
   codexHome?: string;
   claudeConfigDir?: string;
+  engine?: string;
   allowedChatIds?: string;
   allowedGroupChatIds?: string;
   allowedUserIds?: string;
@@ -111,7 +112,14 @@ async function bootstrapFeishuRailwayState(input: {
   const existingConfig = await readJsonFile(configPath);
   let configChanged = false;
   const config = existingConfig ?? {};
-  if (!existingConfig && input.hasDeepseekKey) {
+  if (input.engine === "claude") {
+    config.engine = "claude";
+    delete config.codexRuntime;
+    delete config.provider;
+    delete config.model;
+    delete config.effort;
+    configChanged = true;
+  } else if (!existingConfig && input.hasDeepseekKey) {
     Object.assign(config, {
       engine: "codex",
       codexRuntime: "process",
@@ -200,6 +208,7 @@ async function main(): Promise<void> {
         stateDir: serviceConfig.stateDir,
         codexHome: resolvedEnv.CODEX_HOME,
         claudeConfigDir: resolvedEnv.CLAUDE_CONFIG_DIR,
+        engine: process.env.FEISHU_ENGINE,
         allowedChatIds: process.env.FEISHU_ALLOWED_CHAT_IDS,
         allowedGroupChatIds: process.env.FEISHU_ALLOWED_GROUP_CHAT_IDS,
         allowedUserIds: process.env.FEISHU_ALLOWED_USER_IDS,
