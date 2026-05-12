@@ -1,4 +1,5 @@
 import path from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 import { runCli } from "./commands/cli.js";
 import { acquireInstanceLock } from "./state/instance-lock.js";
@@ -41,6 +42,91 @@ function isFeishuHttpMode(env: NodeJS.ProcessEnv): boolean {
   return Boolean(env.FEISHU_APP_ID && env.FEISHU_APP_SECRET);
 }
 
+function toFeishuBridgeNumericId(value: string): number {
+  if (/^\d+$/.test(value)) {
+    return Number(value);
+  }
+
+  let hash = 0;
+  for (const char of value) {
+    hash = Math.imul(hash, 31) + char.charCodeAt(0);
+    hash >>>= 0;
+  }
+  return hash;
+}
+
+function parseFeishuAllowedChatIds(value: string | undefined): number[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map(toFeishuBridgeNumericId)
+    .filter((entry) => Number.isInteger(entry));
+}
+
+async function readJsonFile(pathname: string): Promise<Record<string, unknown> | null> {
+  try {
+    const parsed = JSON.parse(await readFile(pathname, "utf8"));
+    return typeof parsed === "object" && parsed !== null ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+async function bootstrapFeishuRailwayState(input: {
+  stateDir: string;
+  codexHome?: string;
+  claudeConfigDir?: string;
+  allowedChatIds?: string;
+  hasDeepseekKey: boolean;
+}): Promise<void> {
+  await mkdir(input.stateDir, { recursive: true });
+  await mkdir(path.join(input.stateDir, "workspace"), { recursive: true });
+  if (input.codexHome) await mkdir(input.codexHome, { recursive: true });
+  if (input.claudeConfigDir) await mkdir(input.claudeConfigDir, { recursive: true });
+
+  const allowlist = parseFeishuAllowedChatIds(input.allowedChatIds);
+  if (allowlist.length > 0) {
+    const accessPath = path.join(input.stateDir, "access.json");
+    const existing = await readJsonFile(accessPath);
+    const existingAllowlist = Array.isArray(existing?.allowlist)
+      ? existing.allowlist.filter((entry): entry is number => Number.isInteger(entry))
+      : [];
+    await writeFile(accessPath, JSON.stringify({
+      schemaVersion: 1,
+      multiChat: allowlist.length > 1 || existing?.multiChat === true,
+      policy: existing?.policy === "allowlist" ? "allowlist" : "pairing",
+      pairedUsers: Array.isArray(existing?.pairedUsers) ? existing.pairedUsers : [],
+      allowlist: [...new Set([...existingAllowlist, ...allowlist])],
+      pendingPairs: Array.isArray(existing?.pendingPairs) ? existing.pendingPairs : [],
+    }, null, 2));
+  }
+
+  const configPath = path.join(input.stateDir, "config.json");
+  const existingConfig = await readJsonFile(configPath);
+  if (!existingConfig && input.hasDeepseekKey) {
+    await writeFile(configPath, JSON.stringify({
+      engine: "codex",
+      codexRuntime: "process",
+      locale: "zh",
+      approvalMode: "full-auto",
+      provider: {
+        kind: "openai-compatible",
+        name: "deepseek",
+        model: "deepseek-v4-flash",
+        baseUrl: "https://api.deepseek.com",
+        apiKeyEnv: "DEEPSEEK_API_KEY",
+        temperature: 0.2,
+        thinking: { enabled: true, effort: "medium" },
+        timeoutMs: 1800000,
+        inactivityTimeoutMs: 300000,
+        retries: { maxAttempts: 2, baseDelayMs: 1000, maxDelayMs: 10000 },
+      },
+    }, null, 2));
+  }
+}
+
 async function main(): Promise<void> {
   let logLifecycleEvent: (input: Parameters<typeof appendServiceLifecycleEventSync>[1]) => void = () => {};
   let removeUncaughtExceptionMonitor: (() => void) | undefined;
@@ -79,6 +165,15 @@ async function main(): Promise<void> {
       : await resolveServiceEnvForInstance(baseEnv, instanceName);
 
     const serviceConfig = resolveConfig(resolvedEnv);
+    if (feishuHttpMode) {
+      await bootstrapFeishuRailwayState({
+        stateDir: serviceConfig.stateDir,
+        codexHome: resolvedEnv.CODEX_HOME,
+        claudeConfigDir: resolvedEnv.CLAUDE_CONFIG_DIR,
+        allowedChatIds: process.env.FEISHU_ALLOWED_CHAT_IDS,
+        hasDeepseekKey: Boolean(process.env.DEEPSEEK_API_KEY),
+      });
+    }
     logLifecycleEvent = (event) => appendServiceLifecycleEventSync(serviceConfig.stateDir, event);
     logLifecycleEvent({
       type: "service.starting",
