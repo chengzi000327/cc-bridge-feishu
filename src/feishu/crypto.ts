@@ -8,7 +8,8 @@ export interface FeishuCryptoOptions {
 export function assertFeishuToken(body: unknown, expectedToken?: string): void {
   if (!expectedToken) return;
 
-  const token = (body as { token?: unknown })?.token;
+  const payload = body as { token?: unknown; header?: { token?: unknown } } | undefined;
+  const token = payload?.token ?? payload?.header?.token;
   if (token !== expectedToken) {
     throw new Error("Invalid Feishu verification token");
   }
@@ -31,8 +32,13 @@ export function decryptFeishuPayload(encrypt: string, encryptKey: string): unkno
 }
 
 export function parseFeishuEventBody(body: unknown, options: FeishuCryptoOptions): unknown {
-  if (options.encryptKey && typeof (body as { encrypt?: unknown })?.encrypt === "string") {
-    const decrypted = decryptFeishuPayload((body as { encrypt: string }).encrypt, options.encryptKey);
+  const encrypt = (body as { encrypt?: unknown } | undefined)?.encrypt;
+  if (typeof encrypt === "string") {
+    if (!options.encryptKey) {
+      throw new Error("Feishu encrypted event received but FEISHU_ENCRYPT_KEY is not configured");
+    }
+
+    const decrypted = decryptFeishuPayload(encrypt, options.encryptKey);
     assertFeishuToken(decrypted, options.verificationToken);
     return decrypted;
   }

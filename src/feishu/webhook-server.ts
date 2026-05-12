@@ -87,6 +87,7 @@ export function createFeishuWebhookServer(options: FeishuWebhookOptions) {
           response.headers.forEach((value, key) => res.setHeader(key, value));
           res.end(await response.text());
         } catch (error) {
+          console.error(`Feishu webhook request failed: ${error instanceof Error ? error.message : String(error)}`);
           res.statusCode = 500;
           res.setHeader("Content-Type", "application/json; charset=utf-8");
           res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
