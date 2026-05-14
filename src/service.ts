@@ -29,7 +29,8 @@ import { SessionManager } from "./runtime/session-manager.js";
 import { normalizeInstanceName } from "./instance.js";
 import { ChatQueue } from "./runtime/chat-queue.js";
 import { classifyFailure } from "./runtime/error-classification.js";
-import { loadInstanceConfig, readValidatedConfigFile } from "./runtime/instance-config.js";
+import { loadInstanceConfig, readValidatedConfigFile, updateInstanceConfig } from "./runtime/instance-config.js";
+import { dispatchLocalCommand } from "./runtime/local-commands/dispatch.js";
 import { normalizeProviderConfig } from "./provider/provider-config.js";
 import type { ProviderConfig } from "./provider/provider-config.js";
 
@@ -1138,7 +1139,28 @@ export async function runFeishuHttpService(input: {
     botUnionId: input.env.FEISHU_BOT_UNION_ID,
     botName: input.env.FEISHU_BOT_NAME,
     onMessage: async (message) => {
-      const instanceConfig = await loadInstanceConfig(path.dirname(input.inboxDir));
+      const stateDir = path.dirname(input.inboxDir);
+      const instanceConfig = await loadInstanceConfig(stateDir);
+
+      const handledLocal = await dispatchLocalCommand(message.text, {
+        locale: instanceConfig.locale,
+        currentEngine: instanceConfig.engine,
+        currentProvider: instanceConfig.provider,
+      }, {
+        sendReply: (text) => api.sendMessage(message.chatId, text),
+        updateInstanceConfig: (updater) => updateInstanceConfig(stateDir, updater),
+        clearSessions: async () => {
+          try {
+            const store = new SessionStore(path.join(stateDir, "session.json"));
+            await store.clearAll();
+            return { ok: true };
+          } catch (error) {
+            return { ok: false, error };
+          }
+        },
+      });
+      if (handledLocal) return;
+
       await runQueuedFeishuTurn(message, {
         api,
         bridge: input.bridge,
