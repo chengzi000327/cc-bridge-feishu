@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { BridgeApi, BridgeAttachment, BridgeSendOptions } from "../transport/types.js";
+import type { BridgeApi, BridgeAttachment, BridgeDownloadOptions, BridgeSendOptions } from "../transport/types.js";
 
 interface FeishuApiOptions {
   appId: string;
@@ -95,7 +95,14 @@ export class FeishuApi implements BridgeApi {
     return this.sendMessage(chatId, `文件 ${filename}\n\n${text.slice(0, 30000)}`, options);
   }
 
-  async downloadAttachment(attachment: BridgeAttachment, targetPath: string): Promise<void> {
+  async downloadAttachment(attachment: BridgeAttachment, targetPath: string, options?: BridgeDownloadOptions): Promise<void> {
+    if (options?.rootDir) {
+      const root = path.resolve(options.rootDir);
+      const target = path.resolve(targetPath);
+      if (target !== root && !target.startsWith(`${root}${path.sep}`)) {
+        throw new Error("Feishu attachment target escaped root directory");
+      }
+    }
     await mkdir(path.dirname(targetPath), { recursive: true });
     const token = await this.tenantAccessToken();
     const messageId = attachment.sourceMessageId ?? attachment.id;

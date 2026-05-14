@@ -150,6 +150,39 @@ describe("handleFeishuMessage", () => {
     expect(bridge.handleAuthorizedMessage).toHaveBeenCalledOnce();
   });
 
+  it("sanitizes dangerous attachment names and avoids overwriting duplicates", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "feishu-delivery-safe-"));
+    try {
+      const written: string[] = [];
+      const api = {
+        sendMessage: vi.fn().mockResolvedValue({ messageId: "om_reply" }),
+        sendFile: vi.fn(),
+        downloadAttachment: vi.fn(async (_attachment, targetPath: string) => {
+          written.push(targetPath);
+          await import("node:fs/promises").then(({ writeFile }) => writeFile(targetPath, "body", "utf8"));
+        }),
+      };
+      const bridge = { handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "完成" }) };
+
+      await handleFeishuMessage(message({
+        attachments: [
+          { id: "file/../1", name: "../../secret.txt", kind: "document" },
+          { id: "file/../1", name: "../../secret.txt", kind: "document" },
+          { id: "CON", name: "CON", kind: "document" },
+        ],
+      }), { api, bridge, inboxDir: root });
+
+      expect(written).toHaveLength(3);
+      expect(new Set(written).size).toBe(3);
+      for (const file of written) {
+        expect(file.startsWith(`${path.resolve(root)}${path.sep}`)).toBe(true);
+        expect(path.basename(file)).not.toBe("CON");
+      }
+    } finally {
+      await removeTempRoot(root);
+    }
+  });
+
   it("downloads attachments into the inbox before invoking bridge", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "feishu-delivery-"));
     try {

@@ -78,6 +78,17 @@ describe("FeishuApi", () => {
     );
   });
 
+  it("rejects attachment downloads outside the configured root directory", async () => {
+    const fetchImpl = vi.fn();
+    const api = new FeishuApi({ appId: "app", appSecret: "secret", fetchImpl });
+    await expect(api.downloadAttachment(
+      { id: "file_v2_1", sourceMessageId: "om_1", resourceType: "file", kind: "document" },
+      "/tmp/escape.bin",
+      { rootDir: "/tmp/feishu-inbox-root" },
+    )).rejects.toThrow("Feishu attachment target escaped root directory");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("uses image resource type when downloading image attachments", async () => {
     const bytes = new Uint8Array([5, 6]);
     const fetchImpl = vi.fn()

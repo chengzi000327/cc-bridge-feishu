@@ -44,8 +44,12 @@ export interface BridgeSendOptions {
   inlineActions?: Array<Array<{ text: string; value: string }>>;
 }
 
+export interface BridgeDownloadOptions {
+  rootDir?: string;
+}
+
 export interface BridgeApi {
   sendMessage(chatId: string, text: string, options?: BridgeSendOptions): Promise<{ messageId: string }>;
   sendFile(chatId: string, filename: string, contents: string | Uint8Array, options?: BridgeSendOptions): Promise<{ messageId: string }>;
-  downloadAttachment(attachment: BridgeAttachment, targetPath: string): Promise<void>;
+  downloadAttachment(attachment: BridgeAttachment, targetPath: string, options?: BridgeDownloadOptions): Promise<void>;
 }
