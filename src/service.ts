@@ -20,7 +20,7 @@ import { RuntimeStateStore } from "./state/runtime-state.js";
 import { TelegramApi, withTelegramMessageThread } from "./telegram/api.js";
 import { handleNormalizedTelegramMessage, type TelegramDeliveryContext } from "./telegram/delivery.js";
 import { FeishuApi } from "./feishu/api.js";
-import { handleFeishuMessage } from "./feishu/delivery.js";
+import { handleFeishuMessage, toFeishuBridgeNumericId } from "./feishu/delivery.js";
 import { createFeishuWebhookServer } from "./feishu/webhook-server.js";
 import { handleTelegramApprovalCommand, isTelegramApprovalCommand } from "./telegram/approval-requests.js";
 import { normalizeUpdate, type NormalizedTelegramMessage } from "./telegram/update-normalizer.js";
@@ -1142,24 +1142,36 @@ export async function runFeishuHttpService(input: {
       const stateDir = path.dirname(input.inboxDir);
       const instanceConfig = await loadInstanceConfig(stateDir);
 
-      const handledLocal = await dispatchLocalCommand(message.text, {
+      // Gate local commands behind the same access check the engine pipeline
+      // uses, so unauthorized senders can't switch engine/provider.
+      const access = await input.bridge.checkAccess({
+        chatId: toFeishuBridgeNumericId(message.chatId),
+        userId: toFeishuBridgeNumericId(message.userId),
+        chatType: message.chatType,
         locale: instanceConfig.locale,
-        currentEngine: instanceConfig.engine,
-        currentProvider: instanceConfig.provider,
-      }, {
-        sendReply: (text) => api.sendMessage(message.chatId, text),
-        updateInstanceConfig: (updater) => updateInstanceConfig(stateDir, updater),
-        clearSessions: async () => {
-          try {
-            const store = new SessionStore(path.join(stateDir, "session.json"));
-            await store.clearAll();
-            return { ok: true };
-          } catch (error) {
-            return { ok: false, error };
-          }
-        },
       });
-      if (handledLocal) return;
+      const accessAllowed = access.kind === "allow";
+
+      if (accessAllowed) {
+        const handledLocal = await dispatchLocalCommand(message.text, {
+          locale: instanceConfig.locale,
+          currentEngine: instanceConfig.engine,
+          currentProvider: instanceConfig.provider,
+        }, {
+          sendReply: (text) => api.sendMessage(message.chatId, text),
+          updateInstanceConfig: (updater) => updateInstanceConfig(stateDir, updater),
+          clearSessions: async () => {
+            try {
+              const store = new SessionStore(path.join(stateDir, "session.json"));
+              await store.clearAll();
+              return { ok: true };
+            } catch (error) {
+              return { ok: false, error };
+            }
+          },
+        });
+        if (handledLocal) return;
+      }
 
       await runQueuedFeishuTurn(message, {
         api,
