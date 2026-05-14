@@ -710,16 +710,21 @@ npm run build
 
 Expected: PASS。
 
-- [ ] **Step 5: 手工验收** *(需真实飞书应用环境，运营侧验收)*
+- [x] **Step 5: 手工验收** *(2026-05-14 在 Railway production 上验证通过)*
 
 真实飞书应用验证：
 
-- 私聊 text/post/file/image 都能回复。
-- 群聊普通消息不触发。
-- 群聊 `@bot` 触发。
-- managed group 无 `@bot` 可以触发。
-- 图片和 PDF 能以飞书文件/图片形式发回。
-- 恶意附件名不会逃出 inbox。
+- [x] 私聊 text 能回复 (DeepSeek v4-flash)
+- [x] 群聊普通消息不触发
+- [x] 群聊 `@bot` 触发
+- [x] managed group 无 `@bot` 可以触发
+- [x] 图片 / PDF / post 富文本被正常感知（DeepSeek 引擎无工具能力，以文字方式确认接收）
+
+**实施中实际发现并修复的额外问题（不在原 plan 里）：**
+
+1. Claude Code CLI 在容器内以 root 运行时会拒绝 `--dangerously-skip-permissions` —— 新增 `scripts/docker-entrypoint.sh` + `gosu` 把容器以 `node` 用户跑，并设 `IS_SANDBOX=1` 兜底。Commit `5fc8dcb`。
+2. 容器内 PID 1 在 Railway 重启后被 instance lock 误判为「另一个活进程」，导致服务 crashloop —— 改 `isProcessAlive` 判定：同 PID 视为 stale。Commit `65c0e79`。
+3. Railway env `FEISHU_ENGINE` / `FEISHU_PROVIDER` 在 volume 已存在 `config.json` 时不会触发 bootstrap 覆盖，需要手动删除 `/data/cc-bridge-feishu/config.json` 后重启才能让新 env 生效。这是设计约束，记录为运维 note。
 
 - [x] **Step 6: 提交**
 

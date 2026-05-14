@@ -974,7 +974,13 @@ npm run build
 
 Expected: PASS。
 
-- [ ] **Step 6: 手工验收三条链路** *(需真实飞书/Railway 环境)*
+- [ ] **Step 6: 手工验收三条链路** *(部分完成 2026-05-14)*
+
+| 链路 | 状态 |
+|------|------|
+| `engine=deepseek` + `provider.kind=deepseek` | ✅ 在 Railway production 验证通过：私聊、managed group、`@bot` 群聊全部正常 |
+| `engine=codex` + `provider.kind=openai-compatible`（DeepSeek 经本地 Responses proxy） | ⏳ 未验证，需要切换 engine 后测试 |
+| `engine=claude` + `provider.kind=anthropic-compatible`（DeepSeek 经本地 Anthropic proxy） | ⏳ 未验证，需要切换 engine 后测试，且 Claude CLI 在容器内已通过 gosu drop 解决 root 检查 |
 
 在 Railway 或本地 Feishu HTTP mode 分别验证：
 
