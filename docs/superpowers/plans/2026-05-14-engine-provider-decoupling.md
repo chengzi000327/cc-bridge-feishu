@@ -945,13 +945,14 @@ it("keeps config.json as the runtime source of truth across Railway restarts", a
 Railway 环境变量只用于首次初始化；`config.json` 存在后，运行时以 `/engine` 和 `/provider` 写入的配置为准。
 ```
 
-- [ ] **Step 3: 更新 Dockerfile 启动说明**
+- [x] **Step 3: 更新 Dockerfile 启动说明**
 
-确认 Dockerfile 不再依赖外部 router。保留：
+当前 Dockerfile 已满足要求，无需改动：
 
-- Node 20+
-- Codex CLI / Claude Code CLI 安装逻辑
+- Node 20+ (`FROM node:20-bookworm-slim`)
+- Codex CLI / Claude Code CLI 安装逻辑（`npm install -g @openai/codex @anthropic-ai/claude-code`）
 - `DEEPSEEK_API_KEY` 通过 Railway env 注入
+- 不依赖外部 router
 
 - [x] **Step 4: 运行单元测试**
 
@@ -973,7 +974,7 @@ npm run build
 
 Expected: PASS。
 
-- [ ] **Step 6: 手工验收三条链路**
+- [ ] **Step 6: 手工验收三条链路** *(需真实飞书/Railway 环境)*
 
 在 Railway 或本地 Feishu HTTP mode 分别验证：
 
@@ -1017,6 +1018,8 @@ git commit -m "docs: document engine provider decoupling"
 下面是 0514 engine/provider 主线之后必须补的飞书细节。OpenHarness 已经验证过这些边界，当前项目只覆盖了其中一部分：`src/feishu/delivery.ts` 已经有附件文件名清洗和 inbox 目录 containment，但 normalizer、群聊策略、真实文件发送和富文本解析还需要补齐。
 
 详细实施计划已拆到 `docs/superpowers/plans/2026-05-14-feishu-hardening.md`。执行时优先使用那份计划；本节保留为 engine/provider 主线的后续索引。
+
+**状态（2026-05-14 更新）：** Feishu Hardening Task 1-5 已实现并合入 main（mention 解析、群聊唤醒策略、富文本/卡片文本提取、真实图片/文件上传、附件路径安全）。Task 6 真实飞书联调仍需运营侧验证。下方 Task 8-12 仅作历史索引保留，新工作请直接更新 `2026-05-14-feishu-hardening.md`。
 
 ## Task 8: 飞书群聊唤醒策略
 

@@ -1489,6 +1489,14 @@ Provider 示例：
 
 飞书开放平台需要开启事件订阅 `im.message.receive_v1`，并授予读取用户消息、发送消息、读取文件资源等权限。具体权限名称以飞书后台当前显示为准。
 
+### 飞书群聊和文件
+
+- 群聊默认策略 `managed_or_mention`：私聊永远进入授权流程；群聊只有在 `groupMode.allowedChatIds` 中或明确 `@bot` 时才会触发，避免普通群消息误唤醒。可通过 `FEISHU_GROUP_POLICY=managed_only | mention_only | all` 覆盖默认。
+- 判断 `@bot` 需要在 Railway 环境变量里配置 `FEISHU_BOT_OPEN_ID`（也支持 `FEISHU_BOT_USER_ID` / `FEISHU_BOT_UNION_ID` / `FEISHU_BOT_NAME`）。优先按 ID 精确匹配，缺失时退回 name 匹配。
+- 富文本/卡片/合并转发：`post`、`interactive`、`share_chat`、`share_user`、`merge_forward` 都会按结构提取可读文本（标题、文本节点、链接、`@user_name`、卡片标题和 markdown 等），不再以 JSON 原文落到 engine。
+- 文件和图片：bridge 通过 `/im/v1/images` 和 `/im/v1/files` 真实上传，再发送 `image` 或 `file` 消息。上传失败会抛 `Feishu image/file upload failed`，不会回退到把文件内容塞进文本。
+- 附件下载：bridge 会清洗文件名（白名单、Windows 保留名加 `-file` 后缀、长度截断 160）、防止目录逃逸、并对同一批同名附件追加 `-2`、`-3` 后缀避免覆盖。`FeishuApi.downloadAttachment` 也支持显式 `rootDir`，越界写入会被拒绝。
+
 ---
 
 ## 许可证

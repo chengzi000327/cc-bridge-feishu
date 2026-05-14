@@ -52,7 +52,7 @@
 - Modify: `src/feishu/event-normalizer.ts`
 - Test: `tests/feishu-event-normalizer.test.ts`
 
-- [ ] **Step 1: 写 mention 解析失败测试**
+- [x] **Step 1: 写 mention 解析失败测试**
 
 在 `tests/feishu-event-normalizer.test.ts` 增加：
 
@@ -99,13 +99,13 @@ it("extracts Feishu mentions and marks messages that mention the bot", () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npx vitest run tests/feishu-event-normalizer.test.ts`
 
 Expected: FAIL，`normalizeFeishuEvent` 不接受第二个参数，且 message 没有 `mentionedBot` / `mentions`。
 
-- [ ] **Step 3: 扩展 transport 类型**
+- [x] **Step 3: 扩展 transport 类型**
 
 在 `src/transport/types.ts` 增加：
 
@@ -126,7 +126,7 @@ mentions?: BridgeMention[];
 mentionedBot?: boolean;
 ```
 
-- [ ] **Step 4: 实现 Feishu bot identity 和 mention parser**
+- [x] **Step 4: 实现 Feishu bot identity 和 mention parser**
 
 在 `src/feishu/event-normalizer.ts` 增加：
 
@@ -146,13 +146,13 @@ export interface FeishuBotIdentity {
 - `mentionedBot = true` 当任一 mention 命中 `botOpenId`、`botUserId`、`botUnionId`；仅当这些都缺失时才用 `botName` 兜底。
 - 从 `text` 中移除命中 bot 的 `<at ...>` 标签，其它 mention 转为可读 `@name`。
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `npx vitest run tests/feishu-event-normalizer.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/transport/types.ts src/feishu/event-normalizer.ts tests/feishu-event-normalizer.test.ts
@@ -168,7 +168,7 @@ git commit -m "feat: parse Feishu mentions"
 - Test: `tests/webhook-server.test.ts`
 - Test: `tests/feishu-delivery.test.ts`
 
-- [ ] **Step 1: 写 webhook 注入 bot identity 测试**
+- [x] **Step 1: 写 webhook 注入 bot identity 测试**
 
 在 `tests/webhook-server.test.ts` 增加：
 
@@ -206,7 +206,7 @@ it("uses bot identity to ignore unmentioned group messages by default", async ()
 });
 ```
 
-- [ ] **Step 2: 写 delivery managed group 测试**
+- [x] **Step 2: 写 delivery managed group 测试**
 
 在 `tests/feishu-delivery.test.ts` 增加：
 
@@ -238,13 +238,13 @@ it("processes managed Feishu groups even without a bot mention", async () => {
 });
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `npx vitest run tests/webhook-server.test.ts tests/feishu-delivery.test.ts`
 
 Expected: FAIL，`botOpenId`、`groupPolicy`、`managedGroupIds` 不存在。
 
-- [ ] **Step 4: 实现 group policy 类型和 delivery 判断**
+- [x] **Step 4: 实现 group policy 类型和 delivery 判断**
 
 在 `src/feishu/delivery.ts` 增加：
 
@@ -268,7 +268,7 @@ managedGroupIds?: number[];
 - `managed_or_mention` 处理 managed group 或 `mentionedBot`。
 - 不满足时直接 return，不调用 bridge，也不发消息。
 
-- [ ] **Step 5: webhook-server 传 bot identity**
+- [x] **Step 5: webhook-server 传 bot identity**
 
 `FeishuWebhookOptions` 增加：
 
@@ -282,13 +282,13 @@ groupPolicy?: FeishuGroupPolicy;
 
 在 `normalizeFeishuEvent(parsed, identity)` 中传入 bot identity。默认 `groupPolicy = "managed_or_mention"`。webhook 层只根据 `event.kind` 决定是否调用 `onMessage`；managed group 判断留给 delivery，因为它需要实例配置。
 
-- [ ] **Step 6: 运行测试确认通过**
+- [x] **Step 6: 运行测试确认通过**
 
 Run: `npx vitest run tests/webhook-server.test.ts tests/feishu-delivery.test.ts tests/feishu-event-normalizer.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add src/feishu/webhook-server.ts src/feishu/delivery.ts src/feishu/event-normalizer.ts tests/webhook-server.test.ts tests/feishu-delivery.test.ts tests/feishu-event-normalizer.test.ts
@@ -301,7 +301,7 @@ git commit -m "feat: add Feishu group wake policy"
 - Modify: `src/feishu/event-normalizer.ts`
 - Test: `tests/feishu-event-normalizer.test.ts`
 
-- [ ] **Step 1: 写 post 文本提取测试**
+- [x] **Step 1: 写 post 文本提取测试**
 
 ```ts
 it("extracts readable text from post messages", () => {
@@ -339,7 +339,7 @@ it("extracts readable text from post messages", () => {
 });
 ```
 
-- [ ] **Step 2: 写 interactive/share/merge_forward 测试**
+- [x] **Step 2: 写 interactive/share/merge_forward 测试**
 
 增加一个参数化测试：
 
@@ -368,13 +368,13 @@ it.each([
 });
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `npx vitest run tests/feishu-event-normalizer.test.ts`
 
 Expected: FAIL，`post` 仍输出 JSON 字符串，其它类型为空。
 
-- [ ] **Step 4: 实现 focused extractor**
+- [x] **Step 4: 实现 focused extractor**
 
 在 `event-normalizer.ts` 内拆小函数：
 
@@ -393,17 +393,17 @@ function extractMergeForwardText(content: Record<string, unknown>): string
 - markdown 只做最小清理：去掉 `**`、反引号，不做复杂渲染。
 - 不认识的结构返回空字符串，不抛异常。
 
-- [ ] **Step 5: 空消息 ignore**
+- [x] **Step 5: 空消息 ignore**
 
 如果 `text.trim() === ""` 且 `attachments.length === 0`，返回 `{ kind: "ignore" }`。保留 image/file/audio 这种无文本但有附件的消息。
 
-- [ ] **Step 6: 运行测试确认通过**
+- [x] **Step 6: 运行测试确认通过**
 
 Run: `npx vitest run tests/feishu-event-normalizer.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add src/feishu/event-normalizer.ts tests/feishu-event-normalizer.test.ts
@@ -416,7 +416,7 @@ git commit -m "feat: extract Feishu rich message text"
 - Modify: `src/feishu/api.ts`
 - Test: `tests/feishu-api.test.ts`
 
-- [ ] **Step 1: 写图片上传发送测试**
+- [x] **Step 1: 写图片上传发送测试**
 
 在 `tests/feishu-api.test.ts` 增加：
 
@@ -452,7 +452,7 @@ it("uploads image bytes and sends an image message", async () => {
 });
 ```
 
-- [ ] **Step 2: 写普通文件上传发送测试**
+- [x] **Step 2: 写普通文件上传发送测试**
 
 ```ts
 it("uploads document bytes and sends a file message", async () => {
@@ -477,7 +477,7 @@ it("uploads document bytes and sends a file message", async () => {
 });
 ```
 
-- [ ] **Step 3: 写上传失败不文本回退测试**
+- [x] **Step 3: 写上传失败不文本回退测试**
 
 ```ts
 it("does not fall back to text when file upload fails", async () => {
@@ -492,13 +492,13 @@ it("does not fall back to text when file upload fails", async () => {
 });
 ```
 
-- [ ] **Step 4: 运行测试确认失败**
+- [x] **Step 4: 运行测试确认失败**
 
 Run: `npx vitest run tests/feishu-api.test.ts`
 
 Expected: FAIL，当前 `sendFile()` 仍走 text。
 
-- [ ] **Step 5: 实现 upload helpers**
+- [x] **Step 5: 实现 upload helpers**
 
 在 `src/feishu/api.ts` 增加：
 
@@ -518,7 +518,7 @@ async function uploadFile(filename: string, contents: Uint8Array): Promise<strin
 
 不要手动设置 multipart `Content-Type`，让 runtime 自动生成 boundary。
 
-- [ ] **Step 6: sendFile 真实发送**
+- [x] **Step 6: sendFile 真实发送**
 
 `sendFile()`：
 
@@ -527,13 +527,13 @@ async function uploadFile(filename: string, contents: Uint8Array): Promise<strin
 - 普通文件上传后调用 `postJson` 发 `msg_type: "file"`。
 - `threadId` 暂时映射为 body 里的 `uuid` 不正确，不要乱填；如果 Feishu API 需要 reply/thread，另开任务查官方参数。当前只确保不丢 `options` 类型。
 
-- [ ] **Step 7: 运行测试确认通过**
+- [x] **Step 7: 运行测试确认通过**
 
 Run: `npx vitest run tests/feishu-api.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add src/feishu/api.ts tests/feishu-api.test.ts
@@ -548,7 +548,7 @@ git commit -m "feat: send real Feishu file messages"
 - Test: `tests/feishu-delivery.test.ts`
 - Test: `tests/feishu-api.test.ts`
 
-- [ ] **Step 1: 写恶意文件名和重名附件测试**
+- [x] **Step 1: 写恶意文件名和重名附件测试**
 
 在 `tests/feishu-delivery.test.ts` 增加：
 
@@ -587,7 +587,7 @@ it("sanitizes dangerous attachment names and avoids overwriting duplicates", asy
 });
 ```
 
-- [ ] **Step 2: 写 API root containment 测试**
+- [x] **Step 2: 写 API root containment 测试**
 
 在 `tests/feishu-api.test.ts` 增加：
 
@@ -602,13 +602,13 @@ it("rejects attachment downloads outside the configured root directory", async (
 });
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `npx vitest run tests/feishu-delivery.test.ts tests/feishu-api.test.ts`
 
 Expected: FAIL，重名覆盖、Windows 保留名和 `downloadAttachment` 第三个参数未实现。
 
-- [ ] **Step 4: 实现 filename utility**
+- [x] **Step 4: 实现 filename utility**
 
 在 `src/feishu/delivery.ts` 内新增或抽出：
 
@@ -624,7 +624,7 @@ function safeFeishuFileName(input: { id: string; name?: string; index: number })
 - 最大长度 160 字符，保留扩展名。
 - 同一批附件按 index 加 `-2`、`-3` 后缀避免覆盖。
 
-- [ ] **Step 5: API download root containment**
+- [x] **Step 5: API download root containment**
 
 扩展 `BridgeApi.downloadAttachment` 会影响 transport 接口，先不改接口；在 `FeishuApi.downloadAttachment()` 增加可选第三参：
 
@@ -648,13 +648,13 @@ if (target !== root && !target.startsWith(`${root}${path.sep}`)) {
 
 delivery 层调用时传 `{ rootDir: inboxDir }`。
 
-- [ ] **Step 6: 运行测试确认通过**
+- [x] **Step 6: 运行测试确认通过**
 
 Run: `npx vitest run tests/feishu-delivery.test.ts tests/feishu-api.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add src/feishu/delivery.ts src/feishu/api.ts tests/feishu-delivery.test.ts tests/feishu-api.test.ts
@@ -671,7 +671,7 @@ git commit -m "fix: harden Feishu attachment paths"
 - Test: `tests/feishu-delivery.test.ts`
 - Test: `tests/feishu-api.test.ts`
 
-- [ ] **Step 1: 更新中文 README 的 Feishu 限制说明**
+- [x] **Step 1: 更新中文 README 的 Feishu 限制说明**
 
 在 Feishu/Railway 部署说明附近增加：
 
@@ -682,14 +682,14 @@ git commit -m "fix: harden Feishu attachment paths"
 文件和图片会通过飞书上传接口发送；附件下载会清洗文件名并限制在实例 inbox 目录内。
 ```
 
-- [ ] **Step 2: 回填 0514 主计划状态**
+- [x] **Step 2: 回填 0514 主计划状态**
 
 在 `docs/superpowers/plans/2026-05-14-engine-provider-decoupling.md` 的 Feishu Hardening 区域标注：
 
 - Task 8-12 已拆分到 `2026-05-14-feishu-hardening.md`。
 - 实现完成后同步勾选原 Task 8-12。
 
-- [ ] **Step 3: 跑 focused Feishu 测试**
+- [x] **Step 3: 跑 focused Feishu 测试**
 
 Run:
 
@@ -699,7 +699,7 @@ npx vitest run tests/feishu-event-normalizer.test.ts tests/webhook-server.test.t
 
 Expected: PASS。
 
-- [ ] **Step 4: 跑全量验证**
+- [x] **Step 4: 跑全量验证**
 
 Run:
 
@@ -710,7 +710,7 @@ npm run build
 
 Expected: PASS。
 
-- [ ] **Step 5: 手工验收**
+- [ ] **Step 5: 手工验收** *(需真实飞书应用环境，运营侧验收)*
 
 真实飞书应用验证：
 
@@ -721,7 +721,7 @@ Expected: PASS。
 - 图片和 PDF 能以飞书文件/图片形式发回。
 - 恶意附件名不会逃出 inbox。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add README.zh-CN.md docs/superpowers/plans/2026-05-14-engine-provider-decoupling.md docs/superpowers/plans/2026-05-14-feishu-hardening.md
