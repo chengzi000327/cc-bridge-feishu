@@ -15,6 +15,14 @@ export interface BridgeReplyContext {
   attachments: BridgeAttachment[];
 }
 
+export interface BridgeMention {
+  openId?: string;
+  userId?: string;
+  unionId?: string;
+  name?: string;
+  key?: string;
+}
+
 export interface BridgeMessage {
   platform: BridgePlatform;
   updateId: string;
@@ -26,6 +34,8 @@ export interface BridgeMessage {
   text: string;
   replyContext?: BridgeReplyContext;
   attachments: BridgeAttachment[];
+  mentions?: BridgeMention[];
+  mentionedBot?: boolean;
 }
 
 export interface BridgeSendOptions {

@@ -88,6 +88,100 @@ describe("normalizeFeishuEvent", () => {
     });
   });
 
+  it("extracts Feishu mentions and marks messages that mention the bot", () => {
+    const normalized = normalizeFeishuEvent({
+      header: { event_id: "evt_mention", event_type: "im.message.receive_v1" },
+      event: {
+        sender: { sender_id: { open_id: "ou_sender" } },
+        message: {
+          chat_id: "oc_group",
+          chat_type: "group",
+          message_id: "om_mention",
+          message_type: "text",
+          content: JSON.stringify({
+            text: "<at user_id=\"ou_bot\">BridgeBot</at> 帮我总结",
+          }),
+          mentions: [{
+            key: "@_user_1",
+            id: { open_id: "ou_bot", user_id: "u_bot", union_id: "on_bot" },
+            name: "BridgeBot",
+          }],
+        },
+      },
+    }, {
+      botOpenId: "ou_bot",
+      botName: "BridgeBot",
+    });
+
+    expect(normalized).toMatchObject({
+      kind: "message",
+      message: {
+        mentionedBot: true,
+        text: "帮我总结",
+        mentions: [{
+          key: "@_user_1",
+          openId: "ou_bot",
+          userId: "u_bot",
+          unionId: "on_bot",
+          name: "BridgeBot",
+        }],
+      },
+    });
+  });
+
+  it("falls back to mention name match when bot identity is name only", () => {
+    const normalized = normalizeFeishuEvent({
+      header: { event_id: "evt_mention2", event_type: "im.message.receive_v1" },
+      event: {
+        sender: { sender_id: { open_id: "ou_sender" } },
+        message: {
+          chat_id: "oc_group",
+          chat_type: "group",
+          message_id: "om_mention2",
+          message_type: "text",
+          content: JSON.stringify({
+            text: "<at user_id=\"@_user_1\">BridgeBot</at> 早",
+          }),
+          mentions: [{
+            key: "@_user_1",
+            id: {},
+            name: "BridgeBot",
+          }],
+        },
+      },
+    }, { botName: "BridgeBot" });
+
+    expect(normalized).toMatchObject({
+      kind: "message",
+      message: { mentionedBot: true, text: "早" },
+    });
+  });
+
+  it("does not flag mentionedBot when bot identity does not match", () => {
+    const normalized = normalizeFeishuEvent({
+      header: { event_id: "evt_mention3", event_type: "im.message.receive_v1" },
+      event: {
+        sender: { sender_id: { open_id: "ou_sender" } },
+        message: {
+          chat_id: "oc_group",
+          chat_type: "group",
+          message_id: "om_mention3",
+          message_type: "text",
+          content: JSON.stringify({
+            text: "<at user_id=\"ou_other\">Other</at> hi",
+          }),
+          mentions: [{ key: "@_user_1", id: { open_id: "ou_other" }, name: "Other" }],
+        },
+      },
+    }, { botOpenId: "ou_bot", botName: "BridgeBot" });
+
+    expect(normalized).toMatchObject({
+      kind: "message",
+      message: { mentionedBot: false },
+    });
+    expect((normalized as { message: { mentions: unknown[] } }).message.mentions).toHaveLength(1);
+  });
+
   it("normalizes audio messages as audio attachments", () => {
     const normalized = normalizeFeishuEvent({
       header: { event_id: "evt_4", event_type: "im.message.receive_v1" },
