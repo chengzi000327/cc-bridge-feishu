@@ -11,7 +11,7 @@ import {
   recordTurnUsageAndBudgetAudit,
   type TelegramTurnContext,
 } from "./turn-bookkeeping.js";
-import { chunkTelegramMessage, type Locale } from "./message-renderer.js";
+import { chunkTelegramMessage, type Locale } from "../runtime/message-renderer.js";
 import type { TelegramApi } from "./api.js";
 import type { NormalizedTelegramMessage } from "./update-normalizer.js";
 

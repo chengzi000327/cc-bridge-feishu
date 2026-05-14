@@ -49,7 +49,7 @@ import {
   stopServiceInstance,
   type ServiceCommandDeps,
 } from "./service.js";
-import { applyEngineSelection } from "../telegram/instance-config.js";
+import { applyEngineSelection } from "../runtime/instance-config.js";
 import { runSideChannelSendCommand } from "../telegram/side-channel-send.js";
 import { runConfiguredSendCommand, stripSendRoutingArgs, type ConfiguredSendDeps } from "./send.js";
 import { runCronCli } from "../cron-cli.js";

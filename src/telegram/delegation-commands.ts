@@ -6,7 +6,7 @@ import {
   recordTurnUsageAndBudgetAudit,
   type TelegramTurnContext,
 } from "./turn-bookkeeping.js";
-import { chunkTelegramMessage, type Locale } from "./message-renderer.js";
+import { chunkTelegramMessage, type Locale } from "../runtime/message-renderer.js";
 import type { NormalizedTelegramMessage } from "./update-normalizer.js";
 
 function parseBtwCommand(text: string): { prompt: string } | null {

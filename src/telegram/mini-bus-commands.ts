@@ -22,8 +22,8 @@ import {
 } from "./turn-bookkeeping.js";
 import { handleCrewTelegramWorkflow, type CrewRoleName } from "./crew-workflow.js";
 import { getNormalizedTelegramConversationKey } from "./conversation-key.js";
-import { chunkTelegramMessage, type Locale } from "./message-renderer.js";
-import type { ResumeState } from "./instance-config.js";
+import { chunkTelegramMessage, type Locale } from "../runtime/message-renderer.js";
+import type { ResumeState } from "../runtime/instance-config.js";
 import type { NormalizedTelegramMessage } from "./update-normalizer.js";
 
 export interface MiniBusCommandContext extends TelegramTurnContext {

@@ -5,7 +5,7 @@ import { removeTempRoot } from "./helpers/temp-files.js";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { loadInstanceConfig, updateInstanceConfig } from "../src/telegram/instance-config.js";
+import { loadInstanceConfig, updateInstanceConfig } from "../src/runtime/instance-config.js";
 import { resolveDefaultCronTimezone } from "../src/state/cron-timezone.js";
 import { normalizeProviderConfig } from "../src/provider/provider-config.js";
 

@@ -1,7 +1,7 @@
 import type { Bridge } from "../runtime/bridge.js";
-import type { GroupModeConfig } from "./instance-config.js";
-import type { Locale } from "./message-renderer.js";
-import { renderUnauthorizedMessage } from "./message-renderer.js";
+import type { GroupModeConfig } from "../runtime/instance-config.js";
+import type { Locale } from "../runtime/message-renderer.js";
+import { renderUnauthorizedMessage } from "../runtime/message-renderer.js";
 import type { NormalizedTelegramMessage } from "./update-normalizer.js";
 import {
   appendCommandSuccessAuditEventBestEffort,

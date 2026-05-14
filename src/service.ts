@@ -29,7 +29,7 @@ import { SessionManager } from "./runtime/session-manager.js";
 import { normalizeInstanceName } from "./instance.js";
 import { ChatQueue } from "./runtime/chat-queue.js";
 import { classifyFailure } from "./runtime/error-classification.js";
-import { loadInstanceConfig, readValidatedConfigFile } from "./telegram/instance-config.js";
+import { loadInstanceConfig, readValidatedConfigFile } from "./runtime/instance-config.js";
 import { normalizeProviderConfig } from "./provider/provider-config.js";
 import type { ProviderConfig } from "./provider/provider-config.js";
 

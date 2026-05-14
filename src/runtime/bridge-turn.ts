@@ -1,8 +1,8 @@
 import path from "node:path";
 
 import type { AdapterUsage } from "../codex/adapter.js";
-import type { Locale } from "../telegram/message-renderer.js";
-import { loadInstanceConfig } from "../telegram/instance-config.js";
+import type { Locale } from "./message-renderer.js";
+import { loadInstanceConfig } from "./instance-config.js";
 import { UsageStore, type UsageRecord } from "../state/usage-store.js";
 
 export interface ExhaustedBudgetState {

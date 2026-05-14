@@ -1,6 +1,6 @@
 import type { ProviderConfig } from "../provider/provider-config.js";
 import { createProviderPreset, type EngineName } from "../provider/provider-presets.js";
-import type { Locale } from "./message-renderer.js";
+import type { Locale } from "../runtime/message-renderer.js";
 
 type ProviderCommand =
   | { kind: "query" }

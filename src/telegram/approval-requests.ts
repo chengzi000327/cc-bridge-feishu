@@ -5,7 +5,7 @@ import type { EngineApprovalDecision, EngineApprovalRequest } from "../codex/ada
 import type { TelegramApi } from "./api.js";
 import { TELEGRAM_APPROVAL_TIMEOUT_MS } from "./approval-timeouts.js";
 import { getNormalizedTelegramConversationKey, getTelegramConversationKey } from "./conversation-key.js";
-import type { Locale } from "./message-renderer.js";
+import type { Locale } from "../runtime/message-renderer.js";
 import type { NormalizedTelegramMessage } from "./update-normalizer.js";
 
 type ApprovalApi = Pick<TelegramApi, "sendMessage" | "answerCallbackQuery"> & Partial<Pick<TelegramApi, "editMessage">>;

@@ -1,6 +1,6 @@
 import type { CronRuntime } from "../runtime/cron-runtime.js";
 import { executeTelegramTool } from "../tools/telegram-tool-executor.js";
-import type { Locale } from "./message-renderer.js";
+import type { Locale } from "../runtime/message-renderer.js";
 
 export interface CronAddTagMatch {
   tag: string;

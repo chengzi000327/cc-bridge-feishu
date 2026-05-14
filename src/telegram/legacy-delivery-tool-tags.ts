@@ -1,10 +1,10 @@
 import { executeTelegramTool } from "../tools/telegram-tool-executor.js";
 import type { TelegramToolContext } from "../tools/telegram-tool-types.js";
-import { extractDeliveryTagMatches, stripDeliveryTags } from "./delivery-tags.js";
+import { extractDeliveryTagMatches, stripDeliveryTags } from "../runtime/delivery-tags.js";
 import {
   isLikelyCopiedPlaceholderFilePath,
   isStaticPlaceholderFilePath,
-} from "./file-paths.js";
+} from "../runtime/file-paths.js";
 
 interface ProcessLegacyDeliveryTagsInput {
   text: string;

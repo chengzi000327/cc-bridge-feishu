@@ -19,9 +19,9 @@ import {
 } from "../runtime/file-workflow.js";
 import type { FileWorkflowStore } from "../state/file-workflow-store.js";
 import { appendUpdateHandleAuditEventBestEffort, maybeReplyWithBudgetExhausted, recordTurnUsageAndBudgetAudit } from "./turn-bookkeeping.js";
-import { chunkTelegramMessage, type Locale } from "./message-renderer.js";
+import { chunkTelegramMessage, type Locale } from "../runtime/message-renderer.js";
 import type { InlineKeyboardButton, TelegramApi } from "./api.js";
-import { extractDeliveryTagMatches, hasDeliveryTag, stripDeliveryTags } from "./delivery-tags.js";
+import { extractDeliveryTagMatches, hasDeliveryTag, stripDeliveryTags } from "../runtime/delivery-tags.js";
 import {
   TurnDeliveryLedger,
   type DeliveryAcceptedReceipt,

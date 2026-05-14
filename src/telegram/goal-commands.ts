@@ -1,7 +1,7 @@
 import type { CodexThreadGoal } from "../codex/adapter.js";
 import type { TelegramApi } from "./api.js";
-import type { ResumeState } from "./instance-config.js";
-import type { Locale } from "./message-renderer.js";
+import type { ResumeState } from "../runtime/instance-config.js";
+import type { Locale } from "../runtime/message-renderer.js";
 import type { NormalizedTelegramMessage } from "./update-normalizer.js";
 
 type GoalAction =

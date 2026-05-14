@@ -3,7 +3,7 @@ import path from "node:path";
 import { resolveInstanceStateDir, type EnvSource } from "../config.js";
 import { normalizeInstanceName } from "../instance.js";
 import { TelegramApi } from "../telegram/api.js";
-import { loadInstanceConfig } from "../telegram/instance-config.js";
+import { loadInstanceConfig } from "../runtime/instance-config.js";
 import type { DeliveryRejectedReceipt } from "../telegram/delivery-ledger.js";
 import { deliverTelegramResponse } from "../telegram/response-delivery.js";
 import {

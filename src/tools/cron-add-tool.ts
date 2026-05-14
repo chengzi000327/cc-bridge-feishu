@@ -3,7 +3,7 @@ import { validateCronExpression } from "../runtime/cron-scheduler.js";
 import { appendTimelineEventBestEffort } from "../runtime/timeline-events.js";
 import type { CronJobInput, CronJobRecord } from "../state/cron-store.js";
 import { normalizeCronTimezone } from "../state/cron-timezone.js";
-import type { Locale } from "../telegram/message-renderer.js";
+import type { Locale } from "../runtime/message-renderer.js";
 import type { TelegramToolContext, TelegramToolResult } from "./telegram-tool-types.js";
 
 export type CronAddToolContext = TelegramToolContext;

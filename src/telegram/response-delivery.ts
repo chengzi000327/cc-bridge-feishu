@@ -3,14 +3,14 @@ import path from "node:path";
 
 import { appendTimelineEventBestEffort } from "../runtime/timeline-events.js";
 import type { TelegramApi } from "./api.js";
-import { extractDeliveryTagMatches, stripDeliveryTags } from "./delivery-tags.js";
+import { extractDeliveryTagMatches, stripDeliveryTags } from "../runtime/delivery-tags.js";
 import type { DeliveryAcceptedReceipt, DeliveryRejectedReceipt, DeliverySource } from "./delivery-ledger.js";
 import {
   isAbsoluteFilePath,
   isLikelyCopiedPlaceholderFilePath,
   isStaticPlaceholderFilePath,
-} from "./file-paths.js";
-import { chunkTelegramMessage, type Locale } from "./message-renderer.js";
+} from "../runtime/file-paths.js";
+import { chunkTelegramMessage, type Locale } from "../runtime/message-renderer.js";
 
 function isMarkdownParseError(error: unknown): boolean {
   if (!(error instanceof Error)) {

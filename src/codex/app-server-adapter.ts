@@ -9,7 +9,7 @@ import type {
   CodexThreadGoalResponse,
   CodexUserMessageInput,
 } from "./adapter.js";
-import { readValidatedConfigFile } from "../telegram/instance-config.js";
+import { readValidatedConfigFile } from "../runtime/instance-config.js";
 import { normalizeProviderConfig } from "../provider/provider-config.js";
 
 type SpawnOptions = {

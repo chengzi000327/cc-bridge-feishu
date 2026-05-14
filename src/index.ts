@@ -25,7 +25,7 @@ import { createBusTalkHandler } from "./bus/bus-handler.js";
 import { pruneStaleInstances, registerInstance, deregisterInstance, resolveChannelRoot } from "./bus/bus-registry.js";
 import { appendServiceLifecycleEventSync } from "./runtime/service-lifecycle-log.js";
 import { pruneStaleTelegramRuntimeDirs } from "./runtime/telegram-out.js";
-import { loadInstanceConfig } from "./telegram/instance-config.js";
+import { loadInstanceConfig } from "./runtime/instance-config.js";
 import { buildCronExecutor, sendCronFailureNotification } from "./runtime/cron-executor.js";
 import { initializeCronRuntime, shutdownCronRuntime } from "./runtime/cron-runtime.js";
 import { upgradeInstanceAgentInstructions } from "./commands/access.js";

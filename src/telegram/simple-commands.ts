@@ -4,7 +4,7 @@ import {
   renderTelegramStatusMessage,
   renderUsageMessage,
   type Locale,
-} from "./message-renderer.js";
+} from "../runtime/message-renderer.js";
 import {
   appendCommandSuccessAuditEventBestEffort,
   type TelegramTurnContext,

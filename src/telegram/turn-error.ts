@@ -10,7 +10,7 @@ import {
   renderSessionStateErrorMessage,
   type EngineName,
   type Locale,
-} from "./message-renderer.js";
+} from "../runtime/message-renderer.js";
 import type { TelegramApi } from "./api.js";
 import type { WorkflowAwareTurnState } from "./message-turn.js";
 import {
@@ -18,7 +18,7 @@ import {
   type TelegramTurnContext,
 } from "./turn-bookkeeping.js";
 import type { NormalizedTelegramMessage } from "./update-normalizer.js";
-import { isResetCommand } from "./command-detection.js";
+import { isResetCommand } from "../runtime/command-detection.js";
 import { getNormalizedTelegramConversationKey } from "./conversation-key.js";
 
 function shouldUseNonRepairableResetSessionGuidance(

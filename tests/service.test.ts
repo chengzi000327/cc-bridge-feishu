@@ -29,7 +29,7 @@ import {
   renderCategorizedErrorMessage,
   renderErrorMessage,
   renderWorkingMessage,
-} from "../src/telegram/message-renderer.js";
+} from "../src/runtime/message-renderer.js";
 import { ClaudeStreamAdapter } from "../src/codex/claude-stream-adapter.js";
 import { CodexAppServerAdapter } from "../src/codex/app-server-adapter.js";
 import { ProcessCodexAdapter } from "../src/codex/process-adapter.js";

@@ -11,8 +11,8 @@ import {
   renderPairingMessage,
   renderSingleChatLockedMessage,
   renderUnauthorizedMessage,
-} from "../telegram/message-renderer.js";
-import type { GroupModeConfig } from "../telegram/instance-config.js";
+} from "./message-renderer.js";
+import type { GroupModeConfig } from "./instance-config.js";
 import { runWithProviderRetry, type RetryConfig } from "../provider/retry.js";
 
 export interface AccessStoreLike {

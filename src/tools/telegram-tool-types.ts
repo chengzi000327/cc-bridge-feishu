@@ -1,7 +1,7 @@
 import type { CronRuntime } from "../runtime/cron-runtime.js";
 import type { DeliveryAcceptedReceipt, DeliveryRejectedReceipt, DeliverySource } from "../telegram/delivery-ledger.js";
 import type { TelegramApi } from "../telegram/api.js";
-import type { Locale } from "../telegram/message-renderer.js";
+import type { Locale } from "../runtime/message-renderer.js";
 
 export interface TelegramToolContext {
   cronRuntime: CronRuntime | null;

@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { ConfigFileSchema } from "../src/state/config-file-schema.js";
-import { loadInstanceConfig } from "../src/telegram/instance-config.js";
+import { loadInstanceConfig } from "../src/runtime/instance-config.js";
 import { normalizeProviderConfig } from "../src/provider/provider-config.js";
 import { createProviderPreset } from "../src/provider/provider-presets.js";
 import { removeTempRoot } from "./helpers/temp-files.js";

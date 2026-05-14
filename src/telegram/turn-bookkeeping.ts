@@ -3,7 +3,7 @@ import { appendAuditEventBestEffort } from "../runtime/audit-events.js";
 import { appendTimelineEventBestEffort } from "../runtime/timeline-events.js";
 import { checkBudgetAvailability, recordBridgeTurnUsage } from "../runtime/bridge-turn.js";
 import { classifyFailure } from "../runtime/error-classification.js";
-import { chunkTelegramMessage, type Locale } from "./message-renderer.js";
+import { chunkTelegramMessage, type Locale } from "../runtime/message-renderer.js";
 import type { TelegramApi } from "./api.js";
 import { getTelegramConversationLogScope } from "./conversation-key.js";
 import type { NormalizedTelegramMessage } from "./update-normalizer.js";

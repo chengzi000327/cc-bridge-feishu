@@ -1,10 +1,10 @@
 import { classifyFailure } from "../runtime/error-classification.js";
-import { chunkTelegramMessage, type Locale } from "./message-renderer.js";
+import { chunkTelegramMessage, type Locale } from "../runtime/message-renderer.js";
 import {
   appendCommandSuccessAuditEventBestEffort,
   type TelegramTurnContext,
 } from "./turn-bookkeeping.js";
-import { applyEngineSelection } from "./instance-config.js";
+import { applyEngineSelection } from "../runtime/instance-config.js";
 import type { NormalizedTelegramMessage } from "./update-normalizer.js";
 import { getNormalizedTelegramConversationKey } from "./conversation-key.js";
 import type { EngineName } from "../provider/provider-presets.js";

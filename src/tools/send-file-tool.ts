@@ -1,5 +1,5 @@
 import { deliverTelegramResponse } from "../telegram/response-delivery.js";
-import { isAbsoluteFilePath } from "../telegram/file-paths.js";
+import { isAbsoluteFilePath } from "../runtime/file-paths.js";
 import type {
   TelegramToolContext,
   TelegramToolResult,

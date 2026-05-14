@@ -22,7 +22,7 @@ import {
   renderSessionResetMessage,
   renderUnauthorizedMessage,
   renderWorkingMessage,
-} from "../src/telegram/message-renderer.js";
+} from "../src/runtime/message-renderer.js";
 
 describe("chunkTelegramMessage", () => {
   it("splits long messages into fixed-size chunks", () => {

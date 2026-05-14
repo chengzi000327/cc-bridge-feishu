@@ -2,14 +2,14 @@ import { lstat, unlink } from "node:fs/promises";
 
 import { SessionStateError } from "../runtime/session-manager.js";
 import { formatSessionList, scanRecentClaudeSessions, type ScannedSession } from "../runtime/session-scanner.js";
-import type { ResumeState } from "./instance-config.js";
-import { renderSessionResetMessage, type Locale } from "./message-renderer.js";
+import type { ResumeState } from "../runtime/instance-config.js";
+import { renderSessionResetMessage, type Locale } from "../runtime/message-renderer.js";
 import {
   appendCommandSuccessAuditEventBestEffort,
   type TelegramTurnContext,
 } from "./turn-bookkeeping.js";
 import type { NormalizedTelegramMessage } from "./update-normalizer.js";
-import { isResetCommand } from "./command-detection.js";
+import { isResetCommand } from "../runtime/command-detection.js";
 import { getNormalizedTelegramConversationKey } from "./conversation-key.js";
 
 export interface SessionCommandConfig {

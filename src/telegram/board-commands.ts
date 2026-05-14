@@ -21,8 +21,8 @@ import {
   type TelegramTurnContext,
 } from "./turn-bookkeeping.js";
 import { getNormalizedTelegramConversationKey } from "./conversation-key.js";
-import type { ResumeState } from "./instance-config.js";
-import type { Locale } from "./message-renderer.js";
+import type { ResumeState } from "../runtime/instance-config.js";
+import type { Locale } from "../runtime/message-renderer.js";
 import type { NormalizedTelegramMessage } from "./update-normalizer.js";
 
 type BoardAction =

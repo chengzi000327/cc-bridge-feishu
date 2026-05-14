@@ -10,13 +10,13 @@ import {
 } from "./provider-commands.js";
 import { handleGoalTelegramCommand as defaultHandleGoalTelegramCommand } from "./goal-commands.js";
 import { handleMiniBusTelegramCommand as defaultHandleMiniBusTelegramCommand } from "./mini-bus-commands.js";
-import { loadInstanceConfig, type ResumeState } from "./instance-config.js";
+import { loadInstanceConfig, type ResumeState } from "../runtime/instance-config.js";
 import { prepareTelegramMessageInput as defaultPrepareTelegramMessageInput } from "./message-input.js";
 import {
   executeWorkflowAwareTelegramTurn as defaultExecuteWorkflowAwareTelegramTurn,
   type WorkflowAwareTurnState,
 } from "./message-turn.js";
-import type { Locale } from "./message-renderer.js";
+import type { Locale } from "../runtime/message-renderer.js";
 import { handleLocalSessionTelegramCommand as defaultHandleLocalSessionTelegramCommand } from "./session-commands.js";
 import { handleSimpleLocalTelegramCommand as defaultHandleSimpleLocalTelegramCommand } from "./simple-commands.js";
 import { handleCronCommand as defaultHandleCronCommand, isCronCommand } from "./cron-commands.js";

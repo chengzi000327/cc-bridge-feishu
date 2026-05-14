@@ -7,8 +7,8 @@ import path from "node:path";
 import { executeTelegramTool } from "../tools/telegram-tool-executor.js";
 import type { DeliveryAcceptedReceipt, DeliveryReceipts, DeliveryRejectedReceipt } from "./delivery-ledger.js";
 import type { TelegramApi } from "./api.js";
-import type { Locale } from "./message-renderer.js";
-import { isAbsoluteFilePath } from "./file-paths.js";
+import type { Locale } from "../runtime/message-renderer.js";
+import { isAbsoluteFilePath } from "../runtime/file-paths.js";
 
 export interface SideChannelSendPayload {
   message?: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { buildAsrServiceShellInvocation, createAsrWatchdog } from "../src/telegram/asr-watchdog.js";
+import { buildAsrServiceShellInvocation, createAsrWatchdog } from "../src/runtime/asr-watchdog.js";
 
 describe("createAsrWatchdog", () => {
   it("does not spawn anything when no explicit ASR service command is configured", async () => {

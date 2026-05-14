@@ -4,8 +4,8 @@ import path from "node:path";
 
 import type { DownloadedAttachment } from "../runtime/file-workflow.js";
 import type { TelegramApi } from "./api.js";
-import { createAsrWatchdogFromEnv, type AsrWatchdog } from "./asr-watchdog.js";
-import type { Locale } from "./message-renderer.js";
+import { createAsrWatchdogFromEnv, type AsrWatchdog } from "../runtime/asr-watchdog.js";
+import type { Locale } from "../runtime/message-renderer.js";
 import type { NormalizedTelegramAttachment, NormalizedTelegramMessage } from "./update-normalizer.js";
 
 export type TelegramMessageInputPreparationResult =

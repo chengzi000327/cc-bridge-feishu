@@ -8,7 +8,7 @@ import { classifyFailure } from "../runtime/error-classification.js";
 import { FileWorkflowStore } from "../state/file-workflow-store.js";
 import { SessionStore } from "../state/session-store.js";
 import { dispatchAuthorizedTelegramMessage } from "./authorized-dispatch.js";
-import { loadInstanceConfig, updateInstanceConfig } from "./instance-config.js";
+import { loadInstanceConfig, updateInstanceConfig } from "../runtime/instance-config.js";
 import { deliverTelegramResponse, sendFileOrPhoto } from "./response-delivery.js";
 import {
   appendUpdateReplyAuditEventBestEffort,
@@ -94,7 +94,7 @@ import {
   renderErrorMessage,
   renderUnauthorizedMessage,
   type Locale,
-} from "./message-renderer.js";
+} from "../runtime/message-renderer.js";
 import { TelegramApi, withTelegramMessageThread } from "./api.js";
 import type { NormalizedTelegramMessage } from "./update-normalizer.js";
 import { handleGroupCommand, isGroupCommand } from "./group-commands.js";
