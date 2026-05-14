@@ -137,7 +137,14 @@ export async function acquireInstanceLock(stateDir: string, pid: number = proces
       continue;
     }
 
-    if (isProcessAlive(existing.pid)) {
+    // In a container that gets restarted (Railway, Docker, Kubernetes), the
+    // previous instance always wrote `pid: 1` because it was PID 1. The new
+    // container is also PID 1 but is a different process with a different
+    // token. `process.kill(1, 0)` returns true for self, so we'd falsely
+    // think the old instance is alive. Treat a same-pid lock as stale —
+    // the current process hasn't written its lock yet, so any existing lock
+    // claiming our pid must be from a prior life.
+    if (existing.pid !== pid && isProcessAlive(existing.pid)) {
       throw new Error(`Instance lock already held by pid ${existing.pid}`);
     }
 

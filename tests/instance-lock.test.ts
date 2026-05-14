@@ -53,7 +53,7 @@ describe("instance lock", () => {
     }
   });
 
-  it("rejects a live lock", async () => {
+  it("rejects a live lock held by a different process", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const lockPath = resolveInstanceLockPath(root);
 
@@ -62,7 +62,7 @@ describe("instance lock", () => {
         lockPath,
         JSON.stringify(
           {
-            pid: process.pid,
+            pid: 1,
             token: "live-token",
             acquiredAt: "2026-04-08T00:00:00.000Z",
           },
@@ -72,7 +72,40 @@ describe("instance lock", () => {
         "utf8",
       );
 
-      await expect(acquireInstanceLock(root)).rejects.toThrow(`Instance lock already held by pid ${process.pid}`);
+      await expect(acquireInstanceLock(root, process.pid)).rejects.toThrow(/Instance lock already held by pid 1/);
+    } finally {
+      await removeTempRoot(root);
+    }
+  });
+
+  it("replaces a same-pid lock from a previous container life", async () => {
+    // Containers always run as PID 1, so a Railway/Docker restart leaves an
+    // instance.lock.json claiming pid=1 even though the previous process is
+    // gone. The new container is also PID 1 but a different invocation; the
+    // lock must be reclaimed.
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const lockPath = resolveInstanceLockPath(root);
+
+    try {
+      await writeFile(
+        lockPath,
+        JSON.stringify(
+          {
+            pid: 1,
+            token: "stale-container-token",
+            acquiredAt: "2026-04-08T00:00:00.000Z",
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const lock = await acquireInstanceLock(root, 1);
+      const onDisk = JSON.parse(await readFile(lockPath, "utf8")) as { pid: number; token: string };
+      expect(onDisk.pid).toBe(1);
+      expect(onDisk.token).not.toBe("stale-container-token");
+      await lock.release();
     } finally {
       await removeTempRoot(root);
     }
@@ -115,7 +148,7 @@ describe("instance lock", () => {
         lockPath,
         JSON.stringify(
           {
-            pid: process.pid,
+            pid: 1,
             token: "live-token",
             acquiredAt: "2026-04-08T00:00:00Z",
           },
@@ -125,7 +158,7 @@ describe("instance lock", () => {
         "utf8",
       );
 
-      await expect(acquireInstanceLock(root)).rejects.toThrow(`Instance lock already held by pid ${process.pid}`);
+      await expect(acquireInstanceLock(root, process.pid)).rejects.toThrow(/Instance lock already held by pid 1/);
     } finally {
       await removeTempRoot(root);
     }
