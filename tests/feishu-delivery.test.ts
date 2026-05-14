@@ -50,6 +50,106 @@ describe("handleFeishuMessage", () => {
     expect(api.sendMessage).toHaveBeenCalledWith("oc_1", "完成", undefined);
   });
 
+  it("ignores non-managed group messages without bot mention by default", async () => {
+    const api = {
+      sendMessage: vi.fn(),
+      sendFile: vi.fn(),
+      downloadAttachment: vi.fn(),
+    };
+    const bridge = {
+      handleAuthorizedMessage: vi.fn(),
+    };
+
+    await handleFeishuMessage(message({
+      chatType: "group",
+      chatId: "oc_random",
+      conversationKey: "feishu:oc_random",
+      mentionedBot: false,
+    }), {
+      api,
+      bridge,
+      inboxDir: "/tmp/inbox",
+    });
+
+    expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
+    expect(api.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("processes managed Feishu groups even without a bot mention", async () => {
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ messageId: "om_reply" }),
+      sendFile: vi.fn(),
+      downloadAttachment: vi.fn(),
+    };
+    const bridge = {
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "完成" }),
+    };
+
+    await handleFeishuMessage(message({
+      chatType: "group",
+      chatId: "oc_managed",
+      conversationKey: "feishu:oc_managed",
+      mentionedBot: false,
+    }), {
+      api,
+      bridge,
+      inboxDir: "/tmp/inbox",
+      managedGroupIds: [toFeishuBridgeNumericId("oc_managed")],
+    });
+
+    expect(bridge.handleAuthorizedMessage).toHaveBeenCalledOnce();
+  });
+
+  it("processes mention-only group messages when bot is mentioned", async () => {
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ messageId: "om_reply" }),
+      sendFile: vi.fn(),
+      downloadAttachment: vi.fn(),
+    };
+    const bridge = {
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "完成" }),
+    };
+
+    await handleFeishuMessage(message({
+      chatType: "group",
+      chatId: "oc_random",
+      conversationKey: "feishu:oc_random",
+      mentionedBot: true,
+    }), {
+      api,
+      bridge,
+      inboxDir: "/tmp/inbox",
+      groupPolicy: "mention_only",
+    });
+
+    expect(bridge.handleAuthorizedMessage).toHaveBeenCalledOnce();
+  });
+
+  it("processes any group message when policy is all", async () => {
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ messageId: "om_reply" }),
+      sendFile: vi.fn(),
+      downloadAttachment: vi.fn(),
+    };
+    const bridge = {
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "完成" }),
+    };
+
+    await handleFeishuMessage(message({
+      chatType: "group",
+      chatId: "oc_random",
+      conversationKey: "feishu:oc_random",
+      mentionedBot: false,
+    }), {
+      api,
+      bridge,
+      inboxDir: "/tmp/inbox",
+      groupPolicy: "all",
+    });
+
+    expect(bridge.handleAuthorizedMessage).toHaveBeenCalledOnce();
+  });
+
   it("downloads attachments into the inbox before invoking bridge", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "feishu-delivery-"));
     try {

@@ -48,6 +48,11 @@ export interface FeishuHttpEnv extends EnvSource {
   FEISHU_APP_SECRET?: string;
   FEISHU_VERIFICATION_TOKEN?: string;
   FEISHU_ENCRYPT_KEY?: string;
+  FEISHU_BOT_OPEN_ID?: string;
+  FEISHU_BOT_USER_ID?: string;
+  FEISHU_BOT_UNION_ID?: string;
+  FEISHU_BOT_NAME?: string;
+  FEISHU_GROUP_POLICY?: string;
   PORT?: string;
   HOST?: string;
 }
@@ -1045,6 +1050,8 @@ export async function runQueuedFeishuTurn(
     bridge: Bridge;
     inboxDir: string;
     abortSignal?: AbortSignal;
+    groupPolicy?: import("./feishu/delivery.js").FeishuGroupPolicy;
+    managedGroupIds?: number[];
   },
   chatQueue: ChatQueue = defaultChatQueue,
 ): Promise<void> {
@@ -1095,6 +1102,19 @@ function parseListenPort(value: string | undefined): number {
   return port;
 }
 
+function parseFeishuGroupPolicy(value: string | undefined): import("./feishu/delivery.js").FeishuGroupPolicy | undefined {
+  if (!value) return undefined;
+  switch (value) {
+    case "managed_or_mention":
+    case "managed_only":
+    case "mention_only":
+    case "all":
+      return value;
+    default:
+      throw new Error(`Invalid FEISHU_GROUP_POLICY: ${value}`);
+  }
+}
+
 export async function runFeishuHttpService(input: {
   env: FeishuHttpEnv;
   bridge: Bridge;
@@ -1109,15 +1129,23 @@ export async function runFeishuHttpService(input: {
   }
 
   const api = new FeishuApi({ appId, appSecret });
+  const groupPolicy = parseFeishuGroupPolicy(input.env.FEISHU_GROUP_POLICY);
   const server = createFeishuWebhookServer({
     verificationToken: input.env.FEISHU_VERIFICATION_TOKEN,
     encryptKey: input.env.FEISHU_ENCRYPT_KEY,
+    botOpenId: input.env.FEISHU_BOT_OPEN_ID,
+    botUserId: input.env.FEISHU_BOT_USER_ID,
+    botUnionId: input.env.FEISHU_BOT_UNION_ID,
+    botName: input.env.FEISHU_BOT_NAME,
     onMessage: async (message) => {
+      const instanceConfig = await loadInstanceConfig(path.dirname(input.inboxDir));
       await runQueuedFeishuTurn(message, {
         api,
         bridge: input.bridge,
         inboxDir: input.inboxDir,
         abortSignal: input.abortSignal,
+        groupPolicy,
+        managedGroupIds: instanceConfig.groupMode.allowedChatIds,
       });
     },
     onMessageError: (error, message) => {

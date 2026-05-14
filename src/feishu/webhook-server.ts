@@ -1,10 +1,10 @@
 import http from "node:http";
 
 import { parseFeishuEventBody } from "./crypto.js";
-import { normalizeFeishuEvent } from "./event-normalizer.js";
+import { normalizeFeishuEvent, type FeishuBotIdentity } from "./event-normalizer.js";
 import type { BridgeMessage } from "../transport/types.js";
 
-export interface FeishuWebhookOptions {
+export interface FeishuWebhookOptions extends FeishuBotIdentity {
   verificationToken?: string;
   encryptKey?: string;
   onMessage(message: BridgeMessage): Promise<void>;
@@ -18,6 +18,15 @@ async function readJson(req: http.IncomingMessage): Promise<unknown> {
   }
   const raw = Buffer.concat(chunks).toString("utf8");
   return raw ? JSON.parse(raw) : {};
+}
+
+function botIdentity(options: FeishuWebhookOptions): FeishuBotIdentity {
+  return {
+    botOpenId: options.botOpenId,
+    botUserId: options.botUserId,
+    botUnionId: options.botUnionId,
+    botName: options.botName,
+  };
 }
 
 async function handleRequest(
@@ -36,7 +45,7 @@ async function handleRequest(
     verificationToken: options.verificationToken,
     encryptKey: options.encryptKey,
   });
-  const event = normalizeFeishuEvent(parsed);
+  const event = normalizeFeishuEvent(parsed, botIdentity(options));
 
   if (event.kind === "challenge") {
     return { status: 200, body: { challenge: event.challenge } };

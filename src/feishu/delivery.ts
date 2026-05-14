@@ -5,12 +5,16 @@ import type { Bridge } from "../runtime/bridge.js";
 import { handleBridgeMessage } from "../transport/delivery.js";
 import type { BridgeApi, BridgeAttachment, BridgeMessage } from "../transport/types.js";
 
+export type FeishuGroupPolicy = "managed_or_mention" | "managed_only" | "mention_only" | "all";
+
 export interface FeishuDeliveryContext {
   api: Pick<BridgeApi, "sendMessage" | "sendFile" | "downloadAttachment">;
   bridge: Pick<Bridge, "handleAuthorizedMessage">;
   inboxDir: string;
   locale?: Parameters<Bridge["handleAuthorizedMessage"]>[0]["locale"];
   abortSignal?: AbortSignal;
+  groupPolicy?: FeishuGroupPolicy;
+  managedGroupIds?: number[];
 }
 
 function sanitizeFileNamePart(value: string): string {
@@ -56,10 +60,33 @@ export function toFeishuBridgeNumericId(value: string): number {
   return hash;
 }
 
+function shouldDeliver(message: BridgeMessage, context: FeishuDeliveryContext): boolean {
+  if (message.chatType !== "group") return true;
+
+  const policy: FeishuGroupPolicy = context.groupPolicy ?? "managed_or_mention";
+  if (policy === "all") return true;
+
+  const managed = context.managedGroupIds?.includes(toFeishuBridgeNumericId(message.chatId)) ?? false;
+  const mentioned = message.mentionedBot ?? false;
+
+  switch (policy) {
+    case "managed_only":
+      return managed;
+    case "mention_only":
+      return mentioned;
+    case "managed_or_mention":
+    default:
+      return managed || mentioned;
+  }
+}
+
 export async function handleFeishuMessage(
   message: BridgeMessage,
   context: FeishuDeliveryContext,
 ): Promise<void> {
+  if (!shouldDeliver(message, context)) {
+    return;
+  }
   await handleBridgeMessage(message, {
     ...context,
     toNumericId: toFeishuBridgeNumericId,
