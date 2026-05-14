@@ -40,20 +40,62 @@ describe("FeishuApi", () => {
     );
   });
 
-  it("falls back to sending file contents as text", async () => {
+  it("uploads image bytes and sends an image message", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ code: 0, tenant_access_token: "tat", expire: 7200 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: 0, data: { image_key: "img_uploaded" } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: 0, data: { message_id: "om_img" } }), { status: 200 }));
+    const api = new FeishuApi({ appId: "app", appSecret: "secret", fetchImpl });
+
+    await expect(api.sendFile("oc_1", "chart.png", new Uint8Array([1, 2, 3]))).resolves.toEqual({ messageId: "om_img" });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "https://open.feishu.cn/open-apis/im/v1/images",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: "Bearer tat" }),
+      }),
+    );
+    const sendCall = fetchImpl.mock.calls[2];
+    expect(sendCall?.[0]).toBe("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id");
+    expect(JSON.parse(sendCall?.[1]?.body as string)).toEqual({
+      receive_id: "oc_1",
+      msg_type: "image",
+      content: JSON.stringify({ image_key: "img_uploaded" }),
+    });
+  });
+
+  it("uploads document bytes and sends a file message", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: 0, tenant_access_token: "tat", expire: 7200 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: 0, data: { file_key: "file_uploaded" } }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ code: 0, data: { message_id: "om_file" } }), { status: 200 }));
     const api = new FeishuApi({ appId: "app", appSecret: "secret", fetchImpl });
 
-    await expect(api.sendFile("oc_1", "report.txt", "hello file")).resolves.toEqual({ messageId: "om_file" });
+    await expect(api.sendFile("oc_1", "report.pdf", new Uint8Array([1, 2, 3]))).resolves.toEqual({ messageId: "om_file" });
 
-    const sendCall = fetchImpl.mock.calls[1];
-    expect(JSON.parse(sendCall[1]?.body as string)).toEqual({
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "https://open.feishu.cn/open-apis/im/v1/files",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(JSON.parse(fetchImpl.mock.calls[2]?.[1]?.body as string)).toEqual({
       receive_id: "oc_1",
-      msg_type: "text",
-      content: JSON.stringify({ text: "文件 report.txt\n\nhello file" }),
+      msg_type: "file",
+      content: JSON.stringify({ file_key: "file_uploaded" }),
     });
+  });
+
+  it("does not fall back to text when file upload fails", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: 0, tenant_access_token: "tat", expire: 7200 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: 999, msg: "upload denied" }), { status: 400 }));
+    const api = new FeishuApi({ appId: "app", appSecret: "secret", fetchImpl });
+
+    await expect(api.sendFile("oc_1", "secret.pdf", new Uint8Array([1, 2, 3])))
+      .rejects.toThrow("Feishu file upload failed: upload denied");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it("downloads attachment bytes to the target path", async () => {
