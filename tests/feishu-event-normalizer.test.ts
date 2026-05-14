@@ -182,6 +182,144 @@ describe("normalizeFeishuEvent", () => {
     expect((normalized as { message: { mentions: unknown[] } }).message.mentions).toHaveLength(1);
   });
 
+  it("extracts readable text from post messages", () => {
+    const normalized = normalizeFeishuEvent({
+      header: { event_id: "evt_post", event_type: "im.message.receive_v1" },
+      event: {
+        sender: { sender_id: { open_id: "ou_1" } },
+        message: {
+          chat_id: "oc_1",
+          chat_type: "p2p",
+          message_id: "om_post",
+          message_type: "post",
+          content: JSON.stringify({
+            zh_cn: {
+              title: "日报",
+              content: [[
+                { tag: "text", text: "完成 A" },
+                { tag: "a", text: "链接", href: "https://example.com" },
+                { tag: "at", user_name: "张三" },
+              ]],
+            },
+          }),
+        },
+      },
+    });
+
+    expect(normalized).toMatchObject({
+      kind: "message",
+      message: { text: "日报\n完成 A 链接 https://example.com @张三" },
+    });
+  });
+
+  it("extracts text from interactive card messages", () => {
+    const normalized = normalizeFeishuEvent({
+      header: { event_id: "evt_card", event_type: "im.message.receive_v1" },
+      event: {
+        sender: { sender_id: { open_id: "ou_1" } },
+        message: {
+          chat_id: "oc_1",
+          chat_type: "p2p",
+          message_id: "om_card",
+          message_type: "interactive",
+          content: JSON.stringify({
+            title: "审批卡片",
+            elements: [{ tag: "markdown", content: "**请审批**" }],
+          }),
+        },
+      },
+    });
+
+    expect(normalized).toMatchObject({
+      kind: "message",
+      message: { text: "审批卡片\n请审批" },
+    });
+  });
+
+  it("extracts text from share_chat messages", () => {
+    const normalized = normalizeFeishuEvent({
+      header: { event_id: "evt_sc", event_type: "im.message.receive_v1" },
+      event: {
+        sender: { sender_id: { open_id: "ou_1" } },
+        message: {
+          chat_id: "oc_1",
+          chat_type: "p2p",
+          message_id: "om_sc",
+          message_type: "share_chat",
+          content: JSON.stringify({ chat_id: "oc_shared", name: "项目群" }),
+        },
+      },
+    });
+
+    expect(normalized).toMatchObject({
+      kind: "message",
+      message: { text: "分享群聊：项目群 (oc_shared)" },
+    });
+  });
+
+  it("extracts text from share_user messages", () => {
+    const normalized = normalizeFeishuEvent({
+      header: { event_id: "evt_su", event_type: "im.message.receive_v1" },
+      event: {
+        sender: { sender_id: { open_id: "ou_1" } },
+        message: {
+          chat_id: "oc_1",
+          chat_type: "p2p",
+          message_id: "om_su",
+          message_type: "share_user",
+          content: JSON.stringify({ user_id: "ou_shared", name: "李四" }),
+        },
+      },
+    });
+
+    expect(normalized).toMatchObject({
+      kind: "message",
+      message: { text: "分享用户：李四 (ou_shared)" },
+    });
+  });
+
+  it("extracts text from merge_forward messages", () => {
+    const normalized = normalizeFeishuEvent({
+      header: { event_id: "evt_mf", event_type: "im.message.receive_v1" },
+      event: {
+        sender: { sender_id: { open_id: "ou_1" } },
+        message: {
+          chat_id: "oc_1",
+          chat_type: "p2p",
+          message_id: "om_mf",
+          message_type: "merge_forward",
+          content: JSON.stringify({
+            title: "聊天记录",
+            messages: [{ sender: "A", text: "hello" }],
+          }),
+        },
+      },
+    });
+
+    expect(normalized).toMatchObject({
+      kind: "message",
+      message: { text: "聊天记录\nA: hello" },
+    });
+  });
+
+  it("ignores text messages with no body and no attachments", () => {
+    const normalized = normalizeFeishuEvent({
+      header: { event_id: "evt_empty", event_type: "im.message.receive_v1" },
+      event: {
+        sender: { sender_id: { open_id: "ou_1" } },
+        message: {
+          chat_id: "oc_1",
+          chat_type: "p2p",
+          message_id: "om_empty",
+          message_type: "text",
+          content: JSON.stringify({ text: "" }),
+        },
+      },
+    });
+
+    expect(normalized).toEqual({ kind: "ignore" });
+  });
+
   it("normalizes audio messages as audio attachments", () => {
     const normalized = normalizeFeishuEvent({
       header: { event_id: "evt_4", event_type: "im.message.receive_v1" },

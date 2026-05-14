@@ -114,14 +114,17 @@ function stripBotMentions(text: string, tags: TextMentionTag[], identity: Feishu
       return false;
     });
     if (matched && isBotMention(matched, identity)) {
-      result = result.split(tag.raw).join("").replace(/\s+/g, " ").trim();
+      result = result.split(tag.raw).join("");
     } else if (tag.name) {
       result = result.split(tag.raw).join(`@${tag.name}`);
     } else {
       result = result.split(tag.raw).join("");
     }
   }
-  return result.replace(/\s+/g, " ").trim();
+  return result
+    .replace(/[ \t]+/g, " ")
+    .replace(/^[ \t]+|[ \t]+$/gm, "")
+    .trim();
 }
 
 function extractPostText(content: Record<string, unknown>): string {
