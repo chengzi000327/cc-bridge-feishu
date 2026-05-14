@@ -87,7 +87,7 @@ telegram service restart --all
 
 ## 双引擎：Codex + Claude Code
 
-每个 bot 实例可以独立选择 **OpenAI Codex** 或 **Claude Code** 作为后端引擎，一条命令即可切换：
+每个 bot 实例可以独立选择 **OpenAI Codex**、**Claude Code** 或原生 **DeepSeek** 作为后端引擎，一条命令即可切换：
 
 ```bash
 # 将某个实例设为 Claude Code
@@ -99,6 +99,44 @@ npm run dev -- telegram engine codex --instance helper-bot
 # 查看当前引擎
 npm run dev -- telegram engine --instance review-bot
 ```
+
+### Engine 与 Provider
+
+`engine` 决定由哪个执行器处理消息：`codex`、`claude` 或 `deepseek`。`provider` 决定模型服务连接方式：`deepseek`、`openai-compatible`、`anthropic-compatible` 或 `native`。
+
+示例 `config.json`：
+
+```json
+{
+  "engine": "codex",
+  "provider": {
+    "kind": "openai-compatible",
+    "name": "deepseek",
+    "baseUrl": "https://api.deepseek.com",
+    "model": "deepseek-v4-flash",
+    "apiKeyEnv": "DEEPSEEK_API_KEY"
+  }
+}
+```
+
+运行中可以通过 Telegram 命令切换：
+
+```text
+/engine codex
+/engine claude
+/engine deepseek
+/provider deepseek
+/provider openai-compatible <baseUrl> <model>
+/provider anthropic-compatible <baseUrl> <model>
+```
+
+Railway 环境变量只用于首次初始化；`config.json` 存在后，运行时以 `/engine` 和 `/provider` 写入的配置为准。`DEEPSEEK_API_KEY` 等密钥只通过 `apiKeyEnv` 引用，不写入配置文件。
+
+DeepSeek 兼容路径：
+
+- `codex + deepseek provider`：bridge 启动本地 Responses-to-Chat proxy，把 Codex Responses API 请求转为 DeepSeek `/chat/completions`。
+- `claude + deepseek provider`：bridge 启动本地 Anthropic Messages-to-Chat proxy，把 Claude Messages 请求转为 DeepSeek `/chat/completions`。
+- `deepseek engine`：直接调用 DeepSeek `/chat/completions`，稳定兜底，但不具备 Codex/Claude CLI 的完整本地 coding agent 工具协议。
 
 | 特性 | Codex 引擎 | Claude 引擎 |
 |---|---|---|

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const ProviderKindSchema = z.enum([
   "native",
+  "deepseek",
   "openai-compatible",
   "anthropic-compatible",
   "command-template",
@@ -28,18 +29,20 @@ export const ProviderConfigSchema = z.object({
   }).optional(),
   extraEnv: z.record(z.string(), z.string()).optional(),
   extraArgs: z.array(z.string()).optional(),
+  responsesProxy: z.boolean().optional(),
   command: z.string().min(1).optional(),
   args: z.array(z.string()).optional(),
 }).passthrough();
 
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema> & {
-  kind: "native" | "openai-compatible" | "anthropic-compatible" | "command-template";
+  kind: "native" | "deepseek" | "openai-compatible" | "anthropic-compatible" | "command-template";
   thinking: { enabled?: boolean; effort?: "low" | "medium" | "high" | "xhigh" | "max" };
   timeoutMs: number;
   inactivityTimeoutMs: number | null;
   retries: { maxAttempts: number; baseDelayMs: number; maxDelayMs: number };
   extraEnv: Record<string, string>;
   extraArgs: string[];
+  responsesProxy?: boolean;
 };
 
 export function normalizeProviderConfig(raw: unknown): ProviderConfig {
@@ -65,6 +68,7 @@ export function normalizeProviderConfig(raw: unknown): ProviderConfig {
     },
     extraEnv: value.extraEnv ?? {},
     extraArgs: value.extraArgs ?? [],
+    responsesProxy: value.responsesProxy,
     command: value.command,
     args: value.args,
   };

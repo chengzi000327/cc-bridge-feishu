@@ -328,6 +328,7 @@ export class ProcessCodexAdapter implements CodexAdapter {
     private readonly workspacePath?: string,
     turnTimeoutMs: number = CODEX_PROCESS_TURN_TIMEOUT_MS,
     inactivityTimeoutMs: number | null = CODEX_PROCESS_INACTIVITY_TIMEOUT_MS,
+    private readonly providerOverride?: ProviderConfig,
   ) {
     const buildChildEnv = () => {
       const env = { ...process.env };
@@ -499,13 +500,15 @@ export class ProcessCodexAdapter implements CodexAdapter {
 
   private async loadEngineOptions(): Promise<ProcessEngineOptions> {
     if (!this.configPath) {
-      return defaultProcessEngineOptions();
+      return this.providerOverride
+        ? { provider: this.providerOverride }
+        : defaultProcessEngineOptions();
     }
 
     try {
       const raw = await readFile(this.configPath, "utf8");
       const parsed = JSON.parse(raw) as { effort?: string; model?: string; codexServiceTier?: string; provider?: unknown };
-      const provider = normalizeProviderConfig(parsed.provider);
+      const provider = this.providerOverride ?? normalizeProviderConfig(parsed.provider);
       return {
         effort: provider.thinking.effort ?? (typeof parsed.effort === "string" ? parsed.effort : undefined),
         model: provider.model ?? (typeof parsed.model === "string" ? parsed.model : undefined),
@@ -513,7 +516,9 @@ export class ProcessCodexAdapter implements CodexAdapter {
         provider,
       };
     } catch {
-      return defaultProcessEngineOptions();
+      return this.providerOverride
+        ? { provider: this.providerOverride }
+        : defaultProcessEngineOptions();
     }
   }
 

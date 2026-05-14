@@ -10,6 +10,9 @@ import { ProcessCodexAdapter } from "./codex/process-adapter.js";
 import { ClaudeStreamAdapter } from "./codex/claude-stream-adapter.js";
 import { CodexAppServerAdapter } from "./codex/app-server-adapter.js";
 import type { CodexAdapter } from "./codex/adapter.js";
+import { DeepSeekAdapter } from "./deepseek/adapter.js";
+import { createAnthropicChatProxy, type AnthropicChatProxy } from "./provider/anthropic-chat-proxy.js";
+import { createResponsesChatProxy, type ResponsesChatProxyHandle } from "./provider/responses-chat-proxy.js";
 import { AccessStore } from "./state/access-store.js";
 import { appendAuditEvent } from "./state/audit-log.js";
 import { SessionStore } from "./state/session-store.js";
@@ -28,6 +31,7 @@ import { ChatQueue } from "./runtime/chat-queue.js";
 import { classifyFailure } from "./runtime/error-classification.js";
 import { loadInstanceConfig, readValidatedConfigFile } from "./telegram/instance-config.js";
 import { normalizeProviderConfig } from "./provider/provider-config.js";
+import type { ProviderConfig } from "./provider/provider-config.js";
 
 export interface ServiceDependencies {
   api: TelegramApi;
@@ -448,7 +452,7 @@ async function seedIsolatedClaudeConfig(
   ]);
 }
 
-export type EngineType = "codex" | "claude";
+export type EngineType = "codex" | "claude" | "deepseek";
 type ApprovalMode = "normal" | "full-auto" | "bypass";
 type CodexRuntime = "app-server" | "process";
 
@@ -460,7 +464,7 @@ export async function readInstanceRuntimeConfig(configPath: string): Promise<{
 }> {
   const parsed = await readValidatedConfigFile(configPath);
   return {
-    engine: parsed.engine === "claude" ? "claude" : "codex",
+    engine: parsed.engine === "claude" || parsed.engine === "deepseek" ? parsed.engine : "codex",
     approvalMode:
       parsed.approvalMode === "full-auto" || parsed.approvalMode === "bypass"
         ? parsed.approvalMode
@@ -488,6 +492,9 @@ export function resolveEngineRuntime(
 ): "app-server" | "process" | "stream" {
   if (engine === "claude") {
     return "stream";
+  }
+  if (engine === "deepseek") {
+    return "process";
   }
 
   return codexRuntime ?? "app-server";
@@ -642,6 +649,99 @@ function buildAdapterChildEnv(env: EnvSource): NodeJS.ProcessEnv {
   return childEnv;
 }
 
+class ProxyBackedAdapter implements CodexAdapter {
+  readonly bridgeInstructionMode: CodexAdapter["bridgeInstructionMode"];
+  readonly supportsTurnScopedEnv: CodexAdapter["supportsTurnScopedEnv"];
+
+  constructor(
+    private readonly adapter: CodexAdapter,
+    private readonly proxy: { close(): Promise<void> },
+  ) {
+    this.bridgeInstructionMode = adapter.bridgeInstructionMode;
+    this.supportsTurnScopedEnv = adapter.supportsTurnScopedEnv;
+  }
+
+  createSession(chatId: number) {
+    return this.adapter.createSession(chatId);
+  }
+
+  sendUserMessage(sessionId: string, input: Parameters<CodexAdapter["sendUserMessage"]>[1]) {
+    return this.adapter.sendUserMessage(sessionId, input);
+  }
+
+  validateExternalSession(sessionId: string) {
+    return this.adapter.validateExternalSession?.(sessionId) ?? Promise.resolve();
+  }
+
+  getThreadGoal(sessionId: string, input?: Parameters<NonNullable<CodexAdapter["getThreadGoal"]>>[1]) {
+    return this.adapter.getThreadGoal?.(sessionId, input) ?? Promise.resolve({ goal: null });
+  }
+
+  setThreadGoal(sessionId: string, input: Parameters<NonNullable<CodexAdapter["setThreadGoal"]>>[1]) {
+    if (!this.adapter.setThreadGoal) {
+      return Promise.resolve({ goal: null });
+    }
+    return this.adapter.setThreadGoal(sessionId, input);
+  }
+
+  clearThreadGoal(sessionId: string, input?: Parameters<NonNullable<CodexAdapter["clearThreadGoal"]>>[1]) {
+    if (!this.adapter.clearThreadGoal) {
+      return Promise.resolve({ cleared: false });
+    }
+    return this.adapter.clearThreadGoal(sessionId, input);
+  }
+
+  destroy(): void {
+    this.adapter.destroy?.();
+    void this.proxy.close().catch((error) => {
+      console.error("Failed to close provider proxy:", error instanceof Error ? error.message : error);
+    });
+  }
+}
+
+function isDeepseekProvider(provider: ProviderConfig): boolean {
+  return provider.name?.toLowerCase().includes("deepseek") === true ||
+    provider.baseUrl?.toLowerCase().includes("deepseek") === true ||
+    provider.apiKeyEnv === "DEEPSEEK_API_KEY";
+}
+
+async function createCodexResponsesProxyIfNeeded(
+  provider: ProviderConfig,
+  childEnv: NodeJS.ProcessEnv,
+): Promise<{ provider: ProviderConfig; proxy?: ResponsesChatProxyHandle }> {
+  if (provider.kind !== "openai-compatible" || !isDeepseekProvider(provider)) {
+    return { provider };
+  }
+
+  const proxy = await createResponsesChatProxy({ provider, env: childEnv });
+  return {
+    proxy,
+    provider: {
+      ...provider,
+      baseUrl: `${proxy.baseUrl}/v1`,
+    },
+  };
+}
+
+async function createClaudeAnthropicProxyIfNeeded(
+  provider: ProviderConfig,
+  childEnv: NodeJS.ProcessEnv,
+): Promise<{ childEnv: NodeJS.ProcessEnv; proxy?: AnthropicChatProxy }> {
+  if (provider.kind !== "anthropic-compatible" || !isDeepseekProvider(provider)) {
+    return { childEnv };
+  }
+
+  const proxy = await createAnthropicChatProxy({ provider, env: childEnv });
+  return {
+    proxy,
+    childEnv: {
+      ...childEnv,
+      ANTHROPIC_BASE_URL: proxy.baseUrl,
+      ANTHROPIC_AUTH_TOKEN: childEnv[provider.apiKeyEnv ?? "DEEPSEEK_API_KEY"] ?? "deepseek-proxy",
+    },
+  };
+}
+
 async function createAdapter(
   env: EnvSource,
   config: ReturnType<typeof resolveConfig>,
@@ -655,6 +755,11 @@ async function createAdapter(
   const approvalMode = runtimeConfig.approvalMode;
   const engineRuntime = resolveEngineRuntime(engine, approvalMode, runtimeConfig.codexRuntime);
   const childEnv = buildAdapterChildEnv(env);
+
+  if (engine === "deepseek") {
+    await mkdir(workspacePath, { recursive: true });
+    return new DeepSeekAdapter(provider, childEnv);
+  }
 
   if (engine === "claude") {
     // Bots no longer get a per-instance CLAUDE_CONFIG_DIR. Instead they
@@ -678,19 +783,39 @@ async function createAdapter(
     // auto-memory survive the upgrade.
     await migrateClaudeEngineHomeIfPresent(config.stateDir, env);
     await mkdir(workspacePath, { recursive: true });
-    return new ClaudeStreamAdapter(resolveClaudeExecutable(env), {
-      childEnv,
+    const proxied = await createClaudeAnthropicProxyIfNeeded(provider, childEnv);
+    const adapter = new ClaudeStreamAdapter(resolveClaudeExecutable(env), {
+      childEnv: proxied.childEnv,
       instructionsPath,
       configPath,
       workspacePath,
       turnTimeoutMs: provider.timeoutMs,
     });
+    return proxied.proxy ? new ProxyBackedAdapter(adapter, proxied.proxy) : adapter;
   }
 
   // Same rationale and trade-offs as the Claude branch above: bots inherit
   // CODEX_HOME (or its absence) from the parent env, so they end up on the
   // same config dir as the user's main Codex CLI — avoiding the OAuth
   // refresh-token race at the cost of a wider blast radius.
+  const proxied = await createCodexResponsesProxyIfNeeded(provider, childEnv);
+  if (proxied.proxy) {
+    await mkdir(workspacePath, { recursive: true });
+    const adapter = new ProcessCodexAdapter(
+      config.codexExecutable,
+      childEnv,
+      undefined,
+      instructionsPath,
+      configPath,
+      undefined,
+      workspacePath,
+      proxied.provider.timeoutMs,
+      proxied.provider.inactivityTimeoutMs,
+      proxied.provider,
+    );
+    return new ProxyBackedAdapter(adapter, proxied.proxy);
+  }
+
   if (engineRuntime === "app-server") {
     await mkdir(workspacePath, { recursive: true });
     return new CodexAppServerAdapter(
@@ -707,7 +832,7 @@ async function createAdapter(
   }
 
   await mkdir(workspacePath, { recursive: true });
-  return new ProcessCodexAdapter(
+  const adapter = new ProcessCodexAdapter(
     config.codexExecutable,
     childEnv,
     undefined,
@@ -715,9 +840,11 @@ async function createAdapter(
     configPath,
     undefined,
     workspacePath,
-    provider.timeoutMs,
-    provider.inactivityTimeoutMs,
+    proxied.provider.timeoutMs,
+    proxied.provider.inactivityTimeoutMs,
+    proxied.provider,
   );
+  return adapter;
 }
 
 export async function createBridgeServiceDependencies(env: EnvSource): Promise<{ config: ReturnType<typeof resolveConfig>; bridge: Bridge }> {

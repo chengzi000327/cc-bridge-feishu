@@ -7,6 +7,7 @@ import {
 import { applyEngineSelection } from "./instance-config.js";
 import type { NormalizedTelegramMessage } from "./update-normalizer.js";
 import { getNormalizedTelegramConversationKey } from "./conversation-key.js";
+import type { EngineName } from "../provider/provider-presets.js";
 
 function isCompactCommand(text: string): boolean {
   return /^\/compact(?:@\w+)?(?:\s|$)/i.test(text.trim());
@@ -36,8 +37,8 @@ function parseEngineCommand(text: string): { engine: string; invalid: boolean } 
 
 function renderEngineSwitchMessage(input: {
   locale: Locale;
-  previousEngine?: "claude" | "codex";
-  engine: "claude" | "codex";
+  previousEngine?: EngineName;
+  engine: EngineName;
   clearedModel: boolean;
   resetSessionBindings: boolean;
   resetSessionBindingFailed: boolean;
@@ -76,7 +77,7 @@ function renderEngineSwitchMessage(input: {
 }
 
 export interface EngineCommandConfig {
-  engine: "codex" | "claude";
+  engine: EngineName;
   model?: string;
   resume?: {
     workspacePath: string;
@@ -138,6 +139,7 @@ export async function handleLocalEngineTelegramCommand(input: {
             "用 /engine <名称> 选择引擎：",
             "/engine claude",
             "/engine codex",
+            "/engine deepseek",
             "切换后重启此实例以生效。",
           ].join("\n")
         : [
@@ -145,13 +147,17 @@ export async function handleLocalEngineTelegramCommand(input: {
             "Choose an engine with /engine <name>:",
             "/engine claude",
             "/engine codex",
+            "/engine deepseek",
             "Restart this instance after switching to apply the change.",
           ].join("\n");
       await context.api.sendMessage(normalized.chatId, engineMessage);
-    } else if (engineCmd.invalid || (engineCmd.engine !== "claude" && engineCmd.engine !== "codex")) {
+    } else if (
+      engineCmd.invalid ||
+      (engineCmd.engine !== "claude" && engineCmd.engine !== "codex" && engineCmd.engine !== "deepseek")
+    ) {
       engineMessage = locale === "zh"
-        ? "用法: /engine [claude|codex]"
-        : "Usage: /engine [claude|codex]";
+        ? "用法: /engine [claude|codex|deepseek]"
+        : "Usage: /engine [claude|codex|deepseek]";
       await context.api.sendMessage(normalized.chatId, engineMessage);
     } else {
       const engineChanged = cfg.engine !== engineCmd.engine;
@@ -172,7 +178,7 @@ export async function handleLocalEngineTelegramCommand(input: {
       }
       if (!resetSessionBindingFailed) {
         await updateInstanceConfig((config) => {
-          const result = applyEngineSelection(config, engineCmd.engine as "claude" | "codex");
+          const result = applyEngineSelection(config, engineCmd.engine as EngineName);
           clearedModel = result.clearedModel;
         });
       }

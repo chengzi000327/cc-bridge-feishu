@@ -25,7 +25,7 @@ export interface ResumeState {
 }
 
 export interface InstanceConfig {
-  engine: "codex" | "claude";
+  engine: "codex" | "claude" | "deepseek";
   locale: "en" | "zh";
   verbosity: 0 | 1 | 2;
   budgetUsd: number | undefined;
@@ -98,10 +98,10 @@ function parseGroupMode(raw: unknown): GroupModeConfig {
 
 export function applyEngineSelection(
   config: Record<string, unknown>,
-  engine: "codex" | "claude",
+  engine: "codex" | "claude" | "deepseek",
 ): { clearedModel: boolean } {
   const previousEngine =
-    config.engine === "claude" || config.engine === "codex"
+    config.engine === "claude" || config.engine === "codex" || config.engine === "deepseek"
       ? config.engine
       : undefined;
   const hadModelOverride = typeof config.model === "string" && config.model.trim().length > 0;
@@ -112,7 +112,7 @@ export function applyEngineSelection(
   if (clearedModel) {
     delete config.model;
   }
-  if (engine === "claude") {
+  if (engine !== "codex") {
     delete config.codexServiceTier;
   }
 
@@ -161,7 +161,7 @@ export async function loadInstanceConfig(stateDir: string): Promise<InstanceConf
 
   const effort = VALID_EFFORT_LEVELS.includes(config.effort as EffortLevel) ? config.effort as EffortLevel : undefined;
   return {
-    engine: config.engine === "claude" ? "claude" : "codex",
+    engine: config.engine === "claude" || config.engine === "deepseek" ? config.engine : "codex",
     locale: config.locale === "zh" ? "zh" : "en",
     verbosity: config.verbosity === 0 ? 0 : config.verbosity === 2 ? 2 : 1,
     budgetUsd: typeof config.budgetUsd === "number" && config.budgetUsd > 0 ? config.budgetUsd : undefined,

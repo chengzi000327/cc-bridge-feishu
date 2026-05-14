@@ -33,6 +33,7 @@ import {
 import { ClaudeStreamAdapter } from "../src/codex/claude-stream-adapter.js";
 import { CodexAppServerAdapter } from "../src/codex/app-server-adapter.js";
 import { ProcessCodexAdapter } from "../src/codex/process-adapter.js";
+import { DeepSeekAdapter } from "../src/deepseek/adapter.js";
 import { parseAuditEvents } from "../src/state/audit-log.js";
 import { parseTimelineEvents } from "../src/state/timeline-log.js";
 import * as auditLog from "../src/state/audit-log.js";
@@ -421,6 +422,79 @@ describe("createServiceDependenciesForInstance", () => {
     }
   });
 
+  it("uses the native DeepSeek adapter when the instance engine is deepseek", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const stateDir = path.join(root, ".cctb", "alpha");
+    const envPath = path.join(stateDir, ".env");
+    const configPath = path.join(stateDir, "config.json");
+
+    try {
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(envPath, 'TELEGRAM_BOT_TOKEN="secret-token"\n', "utf8");
+      await writeFile(configPath, JSON.stringify({
+        engine: "deepseek",
+        provider: {
+          kind: "deepseek",
+          name: "deepseek",
+          baseUrl: "https://api.deepseek.com",
+          apiKeyEnv: "DEEPSEEK_API_KEY",
+        },
+      }) + "\n", "utf8");
+
+      const result = await createServiceDependenciesForInstance(
+        {
+          USERPROFILE: root,
+        },
+        "alpha",
+      );
+
+      expect((result.bridge as any).adapter).toBeInstanceOf(DeepSeekAdapter);
+    } finally {
+      await removeTempRoot(root);
+    }
+  });
+
+  it("uses a local responses proxy for Codex with DeepSeek provider", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const stateDir = path.join(root, ".cctb", "alpha");
+    const envPath = path.join(stateDir, ".env");
+    const configPath = path.join(stateDir, "config.json");
+    const originalKey = process.env.DEEPSEEK_API_KEY;
+
+    try {
+      process.env.DEEPSEEK_API_KEY = "secret";
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(envPath, 'TELEGRAM_BOT_TOKEN="secret-token"\n', "utf8");
+      await writeFile(configPath, JSON.stringify({
+        engine: "codex",
+        provider: {
+          kind: "openai-compatible",
+          name: "deepseek",
+          baseUrl: "https://api.deepseek.com",
+          model: "deepseek-v4-flash",
+          apiKeyEnv: "DEEPSEEK_API_KEY",
+        },
+      }) + "\n", "utf8");
+
+      const result = await createServiceDependenciesForInstance(
+        {
+          USERPROFILE: root,
+          CODEX_EXECUTABLE: "codex",
+        },
+        "alpha",
+      );
+      const adapter = (result.bridge as any).adapter;
+
+      expect(adapter.adapter).toBeInstanceOf(ProcessCodexAdapter);
+      expect(adapter.adapter.providerOverride.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+      adapter.destroy();
+    } finally {
+      if (originalKey === undefined) delete process.env.DEEPSEEK_API_KEY;
+      else process.env.DEEPSEEK_API_KEY = originalKey;
+      await removeTempRoot(root);
+    }
+  });
+
   it("uses shared config validation when the service resolves codex runtime options", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const stateDir = path.join(root, ".cctb", "alpha");
@@ -475,6 +549,48 @@ describe("createServiceDependenciesForInstance", () => {
       // user's ~/.claude/ so OAuth refresh tokens don't race across instances.
       expect((result.bridge as any).adapter.childEnv.CLAUDE_CONFIG_DIR).toBeUndefined();
     } finally {
+      await removeTempRoot(root);
+    }
+  });
+
+  it("uses a local Anthropic proxy for Claude with DeepSeek provider", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const stateDir = path.join(root, ".cctb", "alpha");
+    const envPath = path.join(stateDir, ".env");
+    const configPath = path.join(stateDir, "config.json");
+    const originalKey = process.env.DEEPSEEK_API_KEY;
+
+    try {
+      process.env.DEEPSEEK_API_KEY = "secret";
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(envPath, 'TELEGRAM_BOT_TOKEN="secret-token"\n', "utf8");
+      await writeFile(configPath, JSON.stringify({
+        engine: "claude",
+        provider: {
+          kind: "anthropic-compatible",
+          name: "deepseek-via-router",
+          baseUrl: "https://api.deepseek.com",
+          model: "deepseek-v4-flash",
+          apiKeyEnv: "DEEPSEEK_API_KEY",
+        },
+      }) + "\n", "utf8");
+
+      const result = await createServiceDependenciesForInstance(
+        {
+          USERPROFILE: root,
+          CLAUDE_EXECUTABLE: "claude",
+        },
+        "alpha",
+      );
+      const adapter = (result.bridge as any).adapter;
+
+      expect(adapter.adapter).toBeInstanceOf(ClaudeStreamAdapter);
+      expect(adapter.adapter.childEnv.ANTHROPIC_BASE_URL).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+      expect(adapter.adapter.childEnv.ANTHROPIC_AUTH_TOKEN).toBe("secret");
+      adapter.destroy();
+    } finally {
+      if (originalKey === undefined) delete process.env.DEEPSEEK_API_KEY;
+      else process.env.DEEPSEEK_API_KEY = originalKey;
       await removeTempRoot(root);
     }
   });
@@ -6140,6 +6256,7 @@ describe("polling helpers", () => {
           "Choose an engine with /engine <name>:",
           "/engine claude",
           "/engine codex",
+          "/engine deepseek",
           "Restart this instance after switching to apply the change.",
         ].join("\n"),
       );

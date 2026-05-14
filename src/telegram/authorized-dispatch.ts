@@ -4,9 +4,13 @@ import { handleBoardTelegramCommand as defaultHandleBoardTelegramCommand } from 
 import type { SessionStore } from "../state/session-store.js";
 import { handleDelegationTelegramCommand as defaultHandleDelegationTelegramCommand } from "./delegation-commands.js";
 import { handleLocalEngineTelegramCommand as defaultHandleLocalEngineTelegramCommand } from "./engine-commands.js";
+import {
+  handleProviderTelegramCommand as defaultHandleProviderTelegramCommand,
+  isProviderTelegramCommand,
+} from "./provider-commands.js";
 import { handleGoalTelegramCommand as defaultHandleGoalTelegramCommand } from "./goal-commands.js";
 import { handleMiniBusTelegramCommand as defaultHandleMiniBusTelegramCommand } from "./mini-bus-commands.js";
-import type { ResumeState } from "./instance-config.js";
+import { loadInstanceConfig, type ResumeState } from "./instance-config.js";
 import { prepareTelegramMessageInput as defaultPrepareTelegramMessageInput } from "./message-input.js";
 import {
   executeWorkflowAwareTelegramTurn as defaultExecuteWorkflowAwareTelegramTurn,
@@ -22,14 +26,17 @@ import type { NormalizedTelegramMessage } from "./update-normalizer.js";
 import type { CodexThreadGoal, EngineApprovalDecision, EngineApprovalRequest, EngineStreamEvent } from "../codex/adapter.js";
 import type { DeliveryAcceptedReceipt, DeliveryRejectedReceipt, DeliverySource } from "./delivery-ledger.js";
 import { getNormalizedTelegramConversationKey } from "./conversation-key.js";
+import type { ProviderConfig } from "../provider/provider-config.js";
+import type { EngineName } from "../provider/provider-presets.js";
 
 export interface AuthorizedTelegramDispatchConfig {
-  engine: "codex" | "claude";
+  engine: EngineName;
   budgetUsd?: number;
   effort?: string;
   model?: string;
   codexServiceTier?: "fast";
   resume?: ResumeState;
+  provider?: ProviderConfig;
 }
 
 export interface AuthorizedTelegramDispatchContext {
@@ -142,6 +149,7 @@ export interface AuthorizedTelegramDispatchDeps {
 export interface AuthorizedTelegramDispatchHandlers {
     handleLocalSessionTelegramCommand?: typeof defaultHandleLocalSessionTelegramCommand;
     handleLocalEngineTelegramCommand?: typeof defaultHandleLocalEngineTelegramCommand;
+    handleProviderTelegramCommand?: typeof defaultHandleProviderTelegramCommand;
     handleGoalTelegramCommand?: typeof defaultHandleGoalTelegramCommand;
     handleSimpleLocalTelegramCommand?: typeof defaultHandleSimpleLocalTelegramCommand;
   handleCronCommand?: typeof defaultHandleCronCommand;
@@ -190,6 +198,7 @@ export async function dispatchAuthorizedTelegramMessage(input: {
   const {
     handleLocalSessionTelegramCommand = defaultHandleLocalSessionTelegramCommand,
     handleLocalEngineTelegramCommand = defaultHandleLocalEngineTelegramCommand,
+    handleProviderTelegramCommand = defaultHandleProviderTelegramCommand,
     handleGoalTelegramCommand = defaultHandleGoalTelegramCommand,
     handleSimpleLocalTelegramCommand = defaultHandleSimpleLocalTelegramCommand,
     handleCronCommand = defaultHandleCronCommand,
@@ -203,6 +212,7 @@ export async function dispatchAuthorizedTelegramMessage(input: {
 
   const allowTelegramCommands = context.source !== "cron";
   const conversationKey = getNormalizedTelegramConversationKey(normalized);
+  const legacyEngine = cfg.engine as "codex" | "claude";
 
   if (allowTelegramCommands && isCronCommand(normalized.text)) {
     const cronRuntime = getActiveCronRuntime();
@@ -237,7 +247,7 @@ export async function dispatchAuthorizedTelegramMessage(input: {
     startedAt,
     locale,
     cfg: {
-      engine: cfg.engine,
+      engine: legacyEngine,
       resume: cfg.resume,
     },
     normalized,
@@ -267,10 +277,25 @@ export async function dispatchAuthorizedTelegramMessage(input: {
     return;
   }
 
+  if (allowTelegramCommands && isProviderTelegramCommand(normalized.text)) {
+    const currentProvider = cfg.provider ?? (await loadInstanceConfig(stateDir)).provider;
+    if (await handleProviderTelegramCommand({
+      locale,
+      text: normalized.text,
+      currentEngine: cfg.engine,
+      currentProvider,
+      sendMessage: context.api.sendMessage.bind(context.api),
+      chatId: normalized.chatId,
+      updateInstanceConfig,
+    })) {
+      return;
+    }
+  }
+
   if (allowTelegramCommands && await handleGoalTelegramCommand({
     locale,
     cfg: {
-      engine: cfg.engine,
+      engine: legacyEngine,
       resume: cfg.resume,
     },
     normalized,
@@ -284,7 +309,7 @@ export async function dispatchAuthorizedTelegramMessage(input: {
     startedAt,
     locale,
     cfg: {
-      engine: cfg.engine,
+      engine: legacyEngine,
       effort: cfg.effort,
       model: cfg.model,
       codexServiceTier: cfg.codexServiceTier,
@@ -308,7 +333,7 @@ export async function dispatchAuthorizedTelegramMessage(input: {
         : chatRecords.filter((record) => record.status === "awaiting_continue").length;
 
       return {
-        engine: cfg.engine,
+        engine: legacyEngine,
         sessionBound: sessionResult.warning ? null : sessionResult.record !== null,
         threadId: sessionResult.warning || cfg.engine !== "codex"
           ? null
@@ -403,7 +428,7 @@ export async function dispatchAuthorizedTelegramMessage(input: {
     startedAt,
     locale,
     cfg: {
-      engine: cfg.engine,
+      engine: legacyEngine,
       budgetUsd: cfg.budgetUsd,
       resume: cfg.resume,
     },

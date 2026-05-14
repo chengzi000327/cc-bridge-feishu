@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { ConfigFileSchema } from "../src/state/config-file-schema.js";
 import { loadInstanceConfig } from "../src/telegram/instance-config.js";
 import { normalizeProviderConfig } from "../src/provider/provider-config.js";
+import { createProviderPreset } from "../src/provider/provider-presets.js";
 import { removeTempRoot } from "./helpers/temp-files.js";
 
 describe("normalizeProviderConfig", () => {
@@ -65,6 +66,34 @@ describe("normalizeProviderConfig", () => {
     expect(result.success).toBe(true);
   });
 
+  it.each(["deepseek", "openai-compatible", "anthropic-compatible"] as const)(
+    "allows provider kind %s in config file schema",
+    (kind) => {
+      const result = ConfigFileSchema.safeParse({
+        provider: {
+          kind,
+          model: "deepseek-v4-flash",
+          baseUrl: "https://api.deepseek.com",
+        },
+      });
+
+      expect(result.success).toBe(true);
+    },
+  );
+
+  it("keeps old provider config shapes backward compatible", () => {
+    const config = normalizeProviderConfig({
+      model: "legacy-model",
+      baseUrl: "https://legacy.example/v1",
+    });
+
+    expect(config).toMatchObject({
+      kind: "native",
+      model: "legacy-model",
+      baseUrl: "https://legacy.example/v1",
+    });
+  });
+
   it("loads provider config into instance config", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "provider-config-"));
 
@@ -95,5 +124,36 @@ describe("normalizeProviderConfig", () => {
     } finally {
       await removeTempRoot(root);
     }
+  });
+});
+
+describe("createProviderPreset", () => {
+  it("creates DeepSeek defaults for Codex through an OpenAI-compatible provider", () => {
+    expect(createProviderPreset("codex", "deepseek")).toMatchObject({
+      kind: "openai-compatible",
+      name: "deepseek",
+      baseUrl: "https://api.deepseek.com",
+      model: "deepseek-v4-flash",
+      apiKeyEnv: "DEEPSEEK_API_KEY",
+    });
+  });
+
+  it("creates DeepSeek defaults for native DeepSeek engine", () => {
+    expect(createProviderPreset("deepseek", "deepseek")).toMatchObject({
+      kind: "deepseek",
+      name: "deepseek",
+      baseUrl: "https://api.deepseek.com",
+      model: "deepseek-v4-flash",
+      apiKeyEnv: "DEEPSEEK_API_KEY",
+    });
+  });
+
+  it("creates an Anthropic-compatible provider for Claude through router", () => {
+    expect(createProviderPreset("claude", "deepseek")).toMatchObject({
+      kind: "anthropic-compatible",
+      name: "deepseek-via-router",
+      model: "deepseek-v4-flash",
+      apiKeyEnv: "DEEPSEEK_API_KEY",
+    });
   });
 });

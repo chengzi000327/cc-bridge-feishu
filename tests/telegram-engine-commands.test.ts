@@ -56,6 +56,7 @@ describe("handleLocalEngineTelegramCommand", () => {
           "Choose an engine with /engine <name>:",
           "/engine claude",
           "/engine codex",
+          "/engine deepseek",
           "Restart this instance after switching to apply the change.",
         ].join("\n"),
       );
@@ -68,6 +69,45 @@ describe("handleLocalEngineTelegramCommand", () => {
           value: "query",
         }),
       }));
+    } finally {
+      await removeTempRoot(root);
+    }
+  });
+
+  it("switches to the native deepseek engine", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "telegram-engine-commands-"));
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ messageId: "m1" }),
+    };
+    const clearAll = vi.fn().mockResolvedValue(1);
+
+    try {
+      const handled = await handleLocalEngineTelegramCommand({
+        stateDir: root,
+        startedAt: Date.now(),
+        locale: "zh",
+        cfg: { engine: "codex" },
+        normalized: createNormalizedMessage("/engine deepseek"),
+        context: {
+          api: api as never,
+          instanceName: "default",
+          updateId: 79,
+        },
+        bridge: {
+          handleAuthorizedMessage: vi.fn(),
+        },
+        sessionStore: { clearAll, removeByChatId: vi.fn() },
+        updateInstanceConfig: async (updater) => {
+          const config: Record<string, unknown> = { engine: "codex", model: "gpt-5.5" };
+          updater(config);
+          expect(config.engine).toBe("deepseek");
+          expect(config.model).toBeUndefined();
+        },
+      });
+
+      expect(handled).toBe(true);
+      expect(clearAll).toHaveBeenCalledTimes(1);
+      expect(api.sendMessage).toHaveBeenCalledWith(123, expect.stringContaining("deepseek"));
     } finally {
       await removeTempRoot(root);
     }
@@ -206,7 +246,7 @@ describe("handleLocalEngineTelegramCommand", () => {
       });
 
       expect(handled).toBe(true);
-      expect(api.sendMessage).toHaveBeenCalledWith(123, "Usage: /engine [claude|codex]");
+      expect(api.sendMessage).toHaveBeenCalledWith(123, "Usage: /engine [claude|codex|deepseek]");
     } finally {
       await removeTempRoot(root);
     }

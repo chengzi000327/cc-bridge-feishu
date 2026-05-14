@@ -1,7 +1,7 @@
 import type { FailureCategory } from "../runtime/error-classification.js";
 
 export type Locale = "en" | "zh";
-export type EngineName = "codex" | "claude";
+export type EngineName = "codex" | "claude" | "deepseek";
 
 function utf16Length(text: string): number {
   return text.length;
@@ -341,17 +341,20 @@ function extractDiagnosticHttpTarget(detail: string): string | undefined {
   }
 }
 
-function renderEngineName(engine: EngineName | undefined): "Codex" | "Claude" | undefined {
+function renderEngineName(engine: EngineName | undefined): "Codex" | "Claude" | "DeepSeek" | undefined {
   if (engine === "codex") {
     return "Codex";
   }
   if (engine === "claude") {
     return "Claude";
   }
+  if (engine === "deepseek") {
+    return "DeepSeek";
+  }
   return undefined;
 }
 
-function inferEngineName(detail: string, target: string | undefined, engine?: EngineName): "Codex" | "Claude" | "Engine" {
+function inferEngineName(detail: string, target: string | undefined, engine?: EngineName): "Codex" | "Claude" | "DeepSeek" | "Engine" {
   const explicitEngineName = renderEngineName(engine);
   if (explicitEngineName) {
     return explicitEngineName;
